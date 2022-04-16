@@ -3,5 +3,5 @@ __pycache__
 .env
 dist
 src/dubiousdiscord*
-tests/sources*
+**/sources*
 .mypy_cache

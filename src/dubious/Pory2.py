@@ -2,14 +2,13 @@
 import asyncio
 import sys
 import traceback
-from typing import (Any, Callable, ClassVar, Coroutine, Dict, Generic, List,
-                    TypeVar)
+from typing import Any, Callable, ClassVar, Coroutine, TypeVar
 
 from websockets import client
 from websockets import exceptions as wsExceptions
 
-from dubious.Pory import Pory, HalfRegister, Handle
 from dubious.discord import api, enums, rest
+from dubious.Pory import HalfRegister, Handle, Pory
 
 t_Callback_Disc = TypeVar("t_Callback_Disc", bound=api.Disc)
 t_Callback_Pory2 = TypeVar("t_Callback_Pory2", bound="Pory2")
@@ -26,7 +25,7 @@ class Learn(HalfRegister[t_Callback_Pory2, t_Callback_Disc], Dumps):
     description: str
 
     # A list of arguments for the command.
-    options: List["Option"]
+    options: list["Option"]
     # The ID of the guild in which to register this command.
     guildID: api.Snowflake | None
 
@@ -36,7 +35,7 @@ class Learn(HalfRegister[t_Callback_Pory2, t_Callback_Disc], Dumps):
     def __init__(self,
             ident: str,
             description: str,
-            options: List["Option"] | None=None,
+            options: list["Option"] | None=None,
             guildID: api.Snowflake | int | None=None,
             typ=enums.ApplicationCommandTypes.ChatInput
     ):
@@ -60,9 +59,9 @@ class Option(Dumps):
     description: str
     type: enums.CommandOptionTypes
     required: bool
-    choices: List
+    choices: list
 
-    def __init__(self, name: str, description: str, typ: enums.CommandOptionTypes, required: bool=False, choices: List | None=None):
+    def __init__(self, name: str, description: str, typ: enums.CommandOptionTypes, required: bool=False, choices: list | None=None):
         self.name = name
         self.description = description
         self.type = typ
@@ -107,7 +106,7 @@ class Upgrade(Pory):
     # Defined after Ready payload
     _session: str
     _user: api.User
-    _guildIDs: List[api.Snowflake]
+    _guildIDs: list[api.Snowflake]
     _http: rest.Http
 
     _uri: ClassVar = "wss://gateway.discord.gg/?v=9&encoding=json"
@@ -255,7 +254,7 @@ class Upgrade(Pory):
 
 class Pory2(Upgrade):
     name: ClassVar[str]
-    _commands: Dict[str, Learn]
+    _commands: dict[str, Learn]
 
     @property
     def token(self): return super().token
@@ -283,9 +282,9 @@ class Pory2(Upgrade):
 
     @Handle(api.tcode.Ready)
     async def _registerCommands(self, _):
-        t_RegdCommands = Dict[str, api.ApplicationCommand]
-        t_GuildRegdCommands = Dict[api.Snowflake, t_RegdCommands]
-        def dictify(ls: List[api.ApplicationCommand]):
+        t_RegdCommands = dict[str, api.ApplicationCommand]
+        t_GuildRegdCommands = dict[api.Snowflake, t_RegdCommands]
+        def dictify(ls: list[api.ApplicationCommand]):
             return {command.name: command for command in ls}
 
         regdGlobally: t_RegdCommands = dictify(await self.http.getGlobalCommands())
@@ -306,8 +305,8 @@ class Pory2(Upgrade):
     
     async def _processPendingCommand(self,
         pendingCommand: api.CCommand,
-        regdGlobally: Dict[str, api.ApplicationCommand],
-        regdGuildly: Dict[api.Snowflake, Dict[str, api.ApplicationCommand]]
+        regdGlobally: dict[str, api.ApplicationCommand],
+        regdGuildly: dict[api.Snowflake, dict[str, api.ApplicationCommand]]
     ):
         if pendingCommand.guildID:
             if not pendingCommand.guildID in regdGuildly:

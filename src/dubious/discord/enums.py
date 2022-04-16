@@ -117,6 +117,15 @@ class InteractionEventTypes(int, Enum):
     ApplicationCommand = 2
     MessageComponent   = 3
 
+class InteractionResponseTypes(int, Enum):
+    Pong                                 = 1
+    ChannelMessageWithSource             = 4
+    DeferredChannelMessageWithSource     = 5
+    DeferredUpdateMessage                = 6
+    UpdateMessage                        = 7
+    ApplicationCommandAutocompleteResult = 8
+    Modal                                = 9
+
 class IdentifyPermissions(int, Enum):
     CreateInstantInvite =     1 << 0
     KickMembers =             1 << 1

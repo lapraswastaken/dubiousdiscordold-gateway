@@ -249,11 +249,11 @@ class Http:
         return await self.request(
             hdrs.METH_GET, api.Message, Expects.multiple,
             self.url.messages(channelID, None), limit=limit)
-    async def postMessage(self, channelID: api.Snowflake, message: api.CMessage):
+    async def postMessage(self, channelID: api.Snowflake, message: api.CIMessage):
         return await self.request(
             hdrs.METH_POST, api.Message, Expects.single,
             self.url.messages(channelID, None), message)
-    async def patchMessage(self, channelID: api.Snowflake, messageID: api.Snowflake, message: api.CMessage):
+    async def patchMessage(self, channelID: api.Snowflake, messageID: api.Snowflake, message: api.CIMessage):
         return await self.request(
             hdrs.METH_PATCH, api.Message, Expects.single,
             self.url.messages(channelID, messageID), message)

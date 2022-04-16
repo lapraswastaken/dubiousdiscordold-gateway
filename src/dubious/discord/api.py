@@ -4,7 +4,7 @@ from __future__ import annotations
 import datetime as dt
 from typing import Any, Literal, SupportsInt, Tuple
 
-from dubious.discord.enums import ButtonStyles, opcode, tcode
+from dubious.discord.enums import ButtonStyles, InteractionResponseTypes, opcode, tcode
 from pydantic import BaseModel, Extra, Field, ValidationError, validator, fields
 
 
@@ -141,33 +141,33 @@ class Noneable(Disc):
     class Config:
         exclude_none = True
 
-class CFooter(Noneable):
+class CIFooter(Noneable):
     text:     str
     icon_url: str | None
 
-class CMedia(Noneable):
+class CIMedia(Noneable):
     url:       str | None
     proxy_url: str | None
     width:     int | None
     height:    int | None
 
-class CProvider(Noneable):
+class CIProvider(Noneable):
     name: str | None
     url:  str | None
 
-class CAuthor(Noneable):
+class CIAuthor(Noneable):
     name:           str | None
     url:            str | None
     icon_url:       str | None
     proxy_icon_url: str | None
 
-class CField(Noneable):
+class CIField(Noneable):
     name:   str
     value:  str
 
     inline: bool = False
 
-class CEmbed(Noneable):
+class CIEmbed(Noneable):
     type:        str = "rich"
 
     title:       str               | None
@@ -175,15 +175,15 @@ class CEmbed(Noneable):
     url:         str               | None
     timestamp:   str               | None
     color:       int               | None
-    footer:      CFooter      | None
-    image:       CMedia       | None
-    thumbnail:   CMedia       | None
-    video:       CMedia       | None
-    provider:    CProvider    | None
-    author:      CAuthor      | None
-    fields:      list[CField] | None
+    footer:      CIFooter      | None
+    image:       CIMedia       | None
+    thumbnail:   CIMedia       | None
+    video:       CIMedia       | None
+    provider:    CIProvider    | None
+    author:      CIAuthor      | None
+    fields:      list[CIField] | None
 
-class CEmoji(Noneable):
+class CIEmoji(Noneable):
     name: str       | None
     id:   Snowflake | None
 
@@ -192,27 +192,27 @@ class CEmoji(Noneable):
         if isinstance(emoji, Snowflake): self.id = emoji
         else: self.name = emoji
 
-class CComponent(Noneable):
+class CIComponent(Noneable):
     type: int
 
-class CRow(CComponent):
+class CIRow(CIComponent):
     type: int = 1
 
-    components: list[CComponent]
+    components: list[CIComponent]
 
 class HasEmoji(Noneable):
-    emoji: CEmoji | None = None
+    emoji: CIEmoji | None = None
     @validator("emoji")
-    def _emoji(cls, v: CEmoji | Snowflake | str | None):
+    def _emoji(cls, v: CIEmoji | Snowflake | str | None):
         if v:
-            if isinstance(v, CEmoji):
+            if isinstance(v, CIEmoji):
                 return v
             else:
-                return CEmoji(emoji=v)
+                return CIEmoji(emoji=v)
         else:
             return None
 
-class CButton(CComponent, HasEmoji):
+class CIButton(CIComponent, HasEmoji):
     type:      int = 2
 
     style:     ButtonStyles
@@ -221,7 +221,7 @@ class CButton(CComponent, HasEmoji):
     url:       str | None
     disabled: bool = False
 
-class CDropdownOption(HasEmoji):
+class CIDropdownOption(HasEmoji):
     label:       str
     value:       str | None = None
     description: str | None = None
@@ -231,24 +231,32 @@ class CDropdownOption(HasEmoji):
     def _value(cls, value: str | None, values):
         return value if value else values["label"]
 
-class CDropdown(CComponent):
+class CIDropdown(CIComponent):
     type:        int = 3
 
     custom_id:   str
-    options:     list[CDropdownOption]
+    options:     list[CIDropdownOption]
 
     placeholder: str | None = None
     min_values:  int | None = None
     max_values:  int | None = None
     disabled: bool = False
 
-class CMessage(Disc):
+class CICallbackData(Disc):
+    pass
+
+class CIMessage(CICallbackData):
     content:          str             | None
     file:             bytes           | None
     reference:        str             | None
-    embeds:     list[CEmbed]     | None
-    components: list[CComponent] | None
+    embeds:     list[CIEmbed]     | None
+    components: list[CIComponent] | None
     tts: bool = False
+
+
+class CIResponse(Disc):
+    type: InteractionResponseTypes
+    data: CICallbackData
 
 class ErrorCodeMessage(Disc):
     code: str

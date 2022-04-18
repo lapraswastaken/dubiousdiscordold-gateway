@@ -1,5 +1,6 @@
 
 from enum import Enum
+from typing import Literal
 
 
 class opcode(int, Enum):
@@ -112,19 +113,39 @@ class CommandOptionTypes(int, Enum):
     Mentionable     = 9
     Number          = 10
 
+Empty = "** **"
+
+class Intents(int, Enum):
+    Guilds = 1 << 0
+    GuildMembers = 1 << 1
+    GuildBans = 1 << 2
+    GuildEmojisAndStickers = 1 << 3
+    GuildIntegrations = 1 << 4
+    GuildWebhooks = 1 << 5
+    GuildInvites = 1 << 6
+    GuildVoiceStates = 1 << 7
+    GuildPresences = 1 << 8
+    GuildMessages = 1 << 9
+    GuildMessageReactions = 1 << 10
+    GuildMessageTyping = 1 << 11
+    DirectMessages = 1 << 12
+    DirectMessageReactions = 1 << 13
+    DirectMessageTyping = 1 << 14
+
 class InteractionEventTypes(int, Enum):
     Ping               = 1
     ApplicationCommand = 2
     MessageComponent   = 3
 
 class InteractionResponseTypes(int, Enum):
-    Pong                                 = 1
-    ChannelMessageWithSource             = 4
-    DeferredChannelMessageWithSource     = 5
-    DeferredUpdateMessage                = 6
-    UpdateMessage                        = 7
-    ApplicationCommandAutocompleteResult = 8
-    Modal                                = 9
+    """ https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-response-object-interaction-callback-type """
+    Pong           = 1
+    CmdMessage     = 4
+    CmdAckAndEdit  = 5
+    CompAckAndEdit = 6
+    CompEdit       = 7
+    Autocomplete   = 8
+    Modal          = 9
 
 class IdentifyPermissions(int, Enum):
     CreateInstantInvite =     1 << 0
@@ -166,6 +187,8 @@ class IdentifyPermissions(int, Enum):
     UseExternalStickers =     1 << 37
     SendMessagesInThreads =   1 << 38
     StartEmbeddedActivities = 1 << 39
+
+IxnOriginal: Literal["@original"] = "@original"
 
 class JSONErrorCode(int, Enum):
     """ https://discord.com/developers/docs/topics/opcodes-and-status-codes#json """

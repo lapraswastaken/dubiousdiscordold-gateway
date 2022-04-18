@@ -6,8 +6,10 @@ from typing import (Any, ClassVar, Dict, Generic, List, Literal, TypeVar,
 
 import aiohttp
 from aiohttp import hdrs
-from dubious.discord import api
+from dubious.discord import api, make
 from pydantic import BaseModel
+
+from dubious.discord.enums import IxnOriginal
 
 
 def removeNonDicts(l: List) -> List[Dict]:
@@ -58,7 +60,7 @@ class HTTPError(Exception):
         self.payload = payload
         super().__init__(f"in {payload.__class__.__name__}:\n {self.payload}\nin {url}:\n  {self.code}: {self.message}\n{self.formatErrors(self.errors, tab=2)}")
     
-    def formatErrors(self, errors: api.RequestError | api.ObjectError | api.ArrayError, tab=0):
+    def formatErrors(self, errors: api.RequestError | api.ObjectError | api.ArrayError | None, tab=0):
         print(type(errors))
         print(errors)
         tabulation = '  '*tab
@@ -106,7 +108,7 @@ class BuildURL:
         token = f"/{webhookToken}" if webhookID and webhookToken else ""
         return self.baseUrl + webhooks + wid + token
     
-    def webhookMessages(self, webhookID: api.Snowflake, webhookToken: str, messageID: api.Snowflake | None):
+    def webhookMessages(self, webhookID: api.Snowflake, webhookToken: str, messageID: api.Snowflake | None | Literal["@original"]):
         webhooks = f"/webhooks/{webhookID}/{webhookToken}"
         messages = f"/messages/{messageID}" if messageID else ""
         return self.baseUrl + webhooks + messages
@@ -117,6 +119,7 @@ class Expects(int, Enum):
     multiple = 2
 
 t_Expects = Literal[Expects.none] | Literal[Expects.single] | Literal[Expects.multiple]
+t_Original = Literal["@original"]
 
 class Http:
     token: str
@@ -129,10 +132,11 @@ class Http:
     url: BuildURL
 
     def __init__(self, appID: api.Snowflake, appToken: str):
+        self.id = appID
         self.token = appToken
         self.session = aiohttp.ClientSession()
 
-        self.url = BuildURL(self.baseUrl, appID)
+        self.url = BuildURL(self.baseUrl, self.id)
 
         for typ in [
             api.ApplicationCommand,
@@ -215,19 +219,19 @@ class Http:
         return await self.request(
             hdrs.METH_GET, api.ApplicationCommand, Expects.single,
             self.url.commands(guildID, commandID) )
-    async def postCommand(self, command: api.CCommand):
+    async def postCommand(self, command: make.Command):
         return await self.request(
             hdrs.METH_POST, api.ApplicationCommand, Expects.single,
             self.url.commands(None, None), command)
-    async def postGuildCommand(self, guildID: api.Snowflake, command: api.CCommand):
+    async def postGuildCommand(self, guildID: api.Snowflake, command: make.Command):
         return await self.request(
             hdrs.METH_POST, api.ApplicationCommand, Expects.single,
             self.url.commands(guildID, None), command)
-    async def patchCommand(self, commandID: api.Snowflake, command: api.CCommand):
+    async def patchCommand(self, commandID: api.Snowflake, command: make.Command):
         return await self.request(
             hdrs.METH_PATCH, api.ApplicationCommand, Expects.single,
             self.url.commands(None, commandID), command)
-    async def patchGuildCommand(self, guildID: api.Snowflake, commandID: api.Snowflake, command: api.CCommand):
+    async def patchGuildCommand(self, guildID: api.Snowflake, commandID: api.Snowflake, command: make.Command):
         return await self.request(
             hdrs.METH_PATCH, api.ApplicationCommand, Expects.single,
             self.url.commands(guildID, commandID), command)
@@ -249,11 +253,11 @@ class Http:
         return await self.request(
             hdrs.METH_GET, api.Message, Expects.multiple,
             self.url.messages(channelID, None), limit=limit)
-    async def postMessage(self, channelID: api.Snowflake, message: api.CIMessage):
+    async def postMessage(self, channelID: api.Snowflake, message: make.RMessage):
         return await self.request(
             hdrs.METH_POST, api.Message, Expects.single,
             self.url.messages(channelID, None), message)
-    async def patchMessage(self, channelID: api.Snowflake, messageID: api.Snowflake, message: api.CIMessage):
+    async def patchMessage(self, channelID: api.Snowflake, messageID: api.Snowflake, message: make.RMessage):
         return await self.request(
             hdrs.METH_PATCH, api.Message, Expects.single,
             self.url.messages(channelID, messageID), message)
@@ -266,3 +270,24 @@ class Http:
         return await self.request(
             hdrs.METH_POST, api.Message, Expects.multiple,
             self.url.messages(channelID, "bulk-delete"), messages=messageIDs)
+    
+    async def postInteractionResponse(self, interactionID: api.Snowflake, token: str, response: make.Response):
+        return await self.request(
+            hdrs.METH_POST, api.Message, Expects.none,
+            self.url.interactions(interactionID, token), response)
+    async def postInteractionFollowup(self, token: str, followup: make.Response):
+        return await self.request(
+            hdrs.METH_POST, api.Message, Expects.single,
+            self.url.webhookMessages(self.id, token, None), followup)
+    async def getInteractionMessage(self, token: str, messageID: api.Snowflake | None | t_Original=IxnOriginal):
+        return await self.request(
+            hdrs.METH_GET, api.Message, Expects.single,
+            self.url.webhookMessages(self.id, token, messageID) )
+    async def patchInteractionMessage(self, token: str, messageID: api.Snowflake | t_Original, message: make.CallbackData):
+        return await self.request(
+            hdrs.METH_PATCH, api.Message, Expects.single,
+            self.url.webhookMessages(self.id, token, messageID), message)
+    async def deleteInteractionMessage(self, token: str, messageID: api.Snowflake | t_Original=IxnOriginal):
+        return await self.request(
+            hdrs.METH_DELETE, api.Message, Expects.none,
+            self.url.webhookMessages(self.id, token, messageID))

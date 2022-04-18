@@ -1,16 +1,27 @@
 
-from dubious import Pory2, Handle, Learn, api
+from dubious import Pory2, Learn, api, enums, Ixn
 
 class MuOS(Pory2):
-    @Handle(api.tcode.Ready)
-    async def ready(self, _):
-        print(f"{self._user.username} is ready!")
+    def __init__(self):
+        super().__init__()
+        self.count = 0
+
+    @Learn("ping", "Responds with 'Pong!'", guildID=798023066718175252)
+    async def ping(self, ixn: Ixn):
+        await ixn.respond("Pong!")
     
-    @Learn("ping", "Responds with 'Pong!'")
-    async def ping(self, ixn: api.Interaction):
-        print("Pong!")
+    @Learn("inc", "Increments and then prints a number.", guildID=798023066718175252)
+    async def inc(self, ixn: Ixn):
+        self.count += 1
+        await ixn.respond(f"Number is now at {self.count}.")
 
-with open("./sources/key.txt", "r") as f:
-    token = f.read()
+if __name__ == "__main__":
+    with open("./sources/key.txt", "r") as f:
+        token = f.read()
 
-MuOS().start(token, 0)
+    MuOS().start(
+        token,
+        enums.Intents.Guilds |
+        enums.Intents.GuildMessages |
+        enums.Intents.GuildMessageReactions
+    )

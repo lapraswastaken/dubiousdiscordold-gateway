@@ -4,7 +4,7 @@ from __future__ import annotations
 import datetime as dt
 from typing import Any, Literal, SupportsInt, Tuple
 
-from dubious.discord.enums import ButtonStyles, opcode, tcode
+from dubious.discord.enums import ButtonStyles, InteractionResponseTypes, opcode, tcode
 from pydantic import BaseModel, Extra, Field, ValidationError, validator, fields
 
 
@@ -28,8 +28,7 @@ class Snowflake(str):
     def __eq__(self, o: object) -> bool:
         if not isinstance(o, self.__class__):
             try:
-                if not isinstance(o, SupportsInt): raise TypeError()
-                return int(o) == self.id
+                return int(o) == self.id # type: ignore
             except TypeError:
                 return False
         return o.id == self.id
@@ -37,28 +36,15 @@ class Snowflake(str):
     def __ne__(self, o: object) -> bool:
         return not self == o
 
-_Cast_op: dict[opcode, Disc] = {}
-_Cast_t: dict[tcode, Disc] = {}
-def op(op: opcode):
-    def register(cls):
-        _Cast_op[op] = cls
-        return cls
-    return register
-def t(t: tcode):
-    def register(cls):
-        _Cast_t[t] = cls
-        return cls
-    return register
+    @classmethod
+    def __get_validators__(cls):
+        yield cls.validate
 
-def cast(p: Payload):
-    data: Disc | dict | bool | None
-    if p.op in _Cast_op:
-        data = _Cast_op[p.op].parse_obj(p.d)
-    elif p.t in _Cast_t and isinstance(p.t, tcode):
-        data = _Cast_t[p.t].parse_obj(p.d)
-    else:
-        data = p.d if hasattr(p, "d") else {}
-    return data
+    @classmethod
+    def validate(cls, v):
+        if not isinstance(v, (str, int)):
+            raise TypeError(f"Snowflake cannot be created from {type(v)}")
+        return cls(v)
 
 class DiscError(ValueError):
     def __init__(self, cls: type[Disc], data: dict, errors: str):
@@ -73,7 +59,7 @@ class Disc(BaseModel):
             super().__init__(**data)
         except ValidationError as e:
             raise DiscError(self.__class__, data, e.json())
-        #print(f"{self.__class__.__name__}:\n{data}\nactual:\n{self}\n")
+        #print(f"{self.__class__.__name__}:\n{data}\nactual:\n{self.debug()}\n")
     
     class Config:
         underscore_attrs_are_private = False
@@ -92,6 +78,31 @@ class Disc(BaseModel):
             s += ("\n" if leadingNewline else "") + f"{tabulation}{key}{padding} = {fixed}"
         return s
 
+_Cast_op: dict[opcode, Disc] = {}
+_Cast_t: dict[tcode, Disc] = {}
+def op(op: opcode):
+    def register(cls):
+        _Cast_op[op] = cls
+        return cls
+    return register
+def t(t: tcode):
+    def register(cls):
+        _Cast_t[t] = cls
+        return cls
+    return register
+
+t_APIData = dict | bool | Disc | None
+
+def cast(p: Payload):
+    data: t_APIData
+    if p.op in _Cast_op:
+        data = _Cast_op[p.op].parse_obj(p.d)
+    elif p.t in _Cast_t and isinstance(p.t, tcode):
+        data = _Cast_t[p.t].parse_obj(p.d)
+    else:
+        data = p.d if hasattr(p, "d") else {}
+    return data
+
 class IDable(Disc):
     id: Snowflake
 
@@ -99,7 +110,7 @@ class Payload(Disc):
     op: opcode
     t: tcode | str | None
     s: int | None
-    d: dict | bool | Disc | None
+    d: t_APIData
     
     def __init__(self, **data: Any) -> None:
         super().__init__(**data)
@@ -107,148 +118,6 @@ class Payload(Disc):
         #  otherwise it defaults to casting the object to a dict.
         if isinstance(data["d"], Disc):
             self.d = data["d"]
-
-class Identify(Disc):
-    token:      str
-    intents:    int
-    properties: dict
-
-class Resume(Disc):
-    token: str
-    session: str
-    seq: int | None
-
-class CCommandOptionChoice(Disc):
-    name: str
-    value: str
-
-class CCommandOption(Disc):
-    name: str
-    type: int
-    description: str
-
-    required: bool
-    choices: list[CCommandOptionChoice] | None
-
-class CCommand(Disc):
-    name: str
-    type: int
-    description: str
-    options: list[CCommandOption] | None
-    guildID: Snowflake | None
-
-class Noneable(Disc):
-    class Config:
-        exclude_none = True
-
-class CFooter(Noneable):
-    text:     str
-    icon_url: str | None
-
-class CMedia(Noneable):
-    url:       str | None
-    proxy_url: str | None
-    width:     int | None
-    height:    int | None
-
-class CProvider(Noneable):
-    name: str | None
-    url:  str | None
-
-class CAuthor(Noneable):
-    name:           str | None
-    url:            str | None
-    icon_url:       str | None
-    proxy_icon_url: str | None
-
-class CField(Noneable):
-    name:   str
-    value:  str
-
-    inline: bool = False
-
-class CEmbed(Noneable):
-    type:        str = "rich"
-
-    title:       str               | None
-    description: str               | None
-    url:         str               | None
-    timestamp:   str               | None
-    color:       int               | None
-    footer:      CFooter      | None
-    image:       CMedia       | None
-    thumbnail:   CMedia       | None
-    video:       CMedia       | None
-    provider:    CProvider    | None
-    author:      CAuthor      | None
-    fields:      list[CField] | None
-
-class CEmoji(Noneable):
-    name: str       | None
-    id:   Snowflake | None
-
-    def __init__(self, emoji: str | Snowflake):
-        super().__init__()
-        if isinstance(emoji, Snowflake): self.id = emoji
-        else: self.name = emoji
-
-class CComponent(Noneable):
-    type: int
-
-class CRow(CComponent):
-    type: int = 1
-
-    components: list[CComponent]
-
-class HasEmoji(Noneable):
-    emoji: CEmoji | None = None
-    @validator("emoji")
-    def _emoji(cls, v: CEmoji | Snowflake | str | None):
-        if v:
-            if isinstance(v, CEmoji):
-                return v
-            else:
-                return CEmoji(emoji=v)
-        else:
-            return None
-
-class CButton(CComponent, HasEmoji):
-    type:      int = 2
-
-    style:     ButtonStyles
-    label:     str | None
-    custom_id: str | None
-    url:       str | None
-    disabled: bool = False
-
-class CDropdownOption(HasEmoji):
-    label:       str
-    value:       str | None = None
-    description: str | None = None
-    default: bool = False
-
-    @validator("value")
-    def _value(cls, value: str | None, values):
-        return value if value else values["label"]
-
-class CDropdown(CComponent):
-    type:        int = 3
-
-    custom_id:   str
-    options:     list[CDropdownOption]
-
-    placeholder: str | None = None
-    min_values:  int | None = None
-    max_values:  int | None = None
-    disabled: bool = False
-
-class CMessage(Disc):
-    content:          str             | None
-    file:             bytes           | None
-    reference:        str             | None
-    embeds:     list[CEmbed]     | None
-    components: list[CComponent] | None
-    tts: bool = False
 
 class ErrorCodeMessage(Disc):
     code: str
@@ -278,7 +147,7 @@ class ArrayError(Disc):
             self.items.append(ObjectError.parse_obj(value))
 
 class Error(ErrorCodeMessage):
-    errors: RequestError | ObjectError | ArrayError
+    errors: RequestError | ObjectError | ArrayError | None
     # only present in HTTP code 429 (Rate Limit)
     retry_after: float | None
 
@@ -764,6 +633,8 @@ class IntegrationApplication(IDable):
     bot: User | None
 
 # https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object-interaction-structure
+# https://discord.com/developers/docs/topics/gateway#interaction-create
+@t(tcode.InteractionCreate)
 class Interaction(IDable):
     # guaranteed
     id:             Snowflake
@@ -794,7 +665,7 @@ class InteractionData(Disc):
     # not guaranteed for component
     custom_id:       str            | None
     component_type:  int            | None
-    values:    list[SelectOption]  | None
+    values:     list[SelectOption]  | None
     target_id:       Snowflake      | None
 
 # https://discord.com/developers/docs/interactions/application-commands#application-command-object-application-command-interaction-data-option-structure
@@ -882,13 +753,13 @@ class Message(IDable):
     id: Snowflake
     # guaranteed
     channel_id:         Snowflake
-    author:            User
+    author:             User
     content:            str
     timestamp:          dt.datetime
-    edited_timestamp:   dt.datetime
+    edited_timestamp:   dt.datetime | None = Field(...)
     tts:                bool
     mention_everyone:   bool
-    mentions:     list[User]
+    mentions:      list[User]
     mention_roles: list[Snowflake]
     attachments:   list[Attachment]
     embeds:        list[Embed]
@@ -1011,8 +882,8 @@ class Reaction(Disc):
 @t(tcode.Ready)
 class Ready(Disc):
     v:             int
-    user:         User
-    guilds:  list[UnavailableGuild]
+    user:          User
+    guilds:   list[UnavailableGuild]
     session_id:    str
     application:   PartialApplication
 

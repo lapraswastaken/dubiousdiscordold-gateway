@@ -4,8 +4,8 @@ from typing_extensions import Self
 
 from dubious.discord import api, enums
 
+t_CallbackDisc = TypeVar("t_CallbackDisc")
 t_CallbackPory = TypeVar("t_CallbackPory", bound="Pory")
-t_CallbackDisc = TypeVar("t_CallbackDisc", bound=api.Disc)
 t_Callback = Callable[[t_CallbackPory, t_CallbackDisc | bool | None], Coroutine[Any, Any, Any]]
 
 class HalfRegister(Generic[t_CallbackPory, t_CallbackDisc]):

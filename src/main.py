@@ -1,6 +1,8 @@
 
+import re
 from dubious import TR, Chip, Ixn, Option, Pory2, api, enums
 
+p_Tag = re.compile(r"<.(\d+)>")
 
 class mu2OS(Pory2):
     # class Channels(Schema):
@@ -38,7 +40,11 @@ class mu2OS(Pory2):
         Option("tag", "Any Discord tag.", enums.CommandOptionTypes.String)
     ], guildID=798023066718175252)
     async def id_(self, ixn: Ixn, tag: str):
-        await ixn.respond(f"That tag has the ID {tag}.")
+        match = p_Tag.match(tag)
+        if not match:
+            await ixn.respond(f"Couldn't find an ID in the tag `{tag}`.")
+            return
+        await ixn.respond(f"That tag has the ID {match.group(1)}.")
 
 if __name__ == "__main__":
     with open("./sources/key.txt", "r") as f:

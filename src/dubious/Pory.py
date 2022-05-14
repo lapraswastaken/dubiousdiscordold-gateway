@@ -18,24 +18,13 @@ class Chip(Core):
 
     running: asyncio.Event
 
-    _user: api.User
-    guildIDs: set[api.Snowflake]
-
     def __init__(self):
         self._handlers = []
 
     @property
     def chip(self): return self
-
-    @property
-    def user(self): return self._user
     @property
     def core(self): return self._core
-
-    @property
-    def id(self): return self._user.id
-    @property
-    def token(self): return self._core.token
 
     def getcoros(self):
         return self._core.getcoros() + (
@@ -82,15 +71,20 @@ class Chip(Core):
 class Pory:
     chip: Chip
 
-    @property
-    def user(self): return self.chip.user
-    @property
-    def core(self): return self.chip.core
+    _user: api.User
+    _guildIDs: set[api.Snowflake]
+
+    http: rest.Http
 
     @property
-    def id(self): return self.chip.id
+    def user(self): return self._user
     @property
-    def token(self): return self.chip.token
+    def guildIDs(self): return self._guildIDs
+
+    @property
+    def id(self): return self._user.id
+    @property
+    def token(self): return self.chip.core.token
 
     def use(self, chip: Chip | Self):
         if isinstance(chip, Pory):
@@ -110,9 +104,8 @@ class Pory:
     @HM(enums.tcode.Ready)
     async def ready(self, ready: api.Ready):
         self._user = ready.user
-        self.guildIDs = {g.id for g in ready.guilds}
+        self._guildIDs = {g.id for g in ready.guilds}
         self.http = rest.Http(self.user.id, self.token)
-
 
 class Pory2(Pory):
     doPrintCommands: ClassVar = True

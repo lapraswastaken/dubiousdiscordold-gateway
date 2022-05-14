@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 import datetime as dt
-from typing import Any, Literal, SupportsInt, Tuple
+from typing import Any, Tuple
 
-from dubious.discord.enums import ButtonStyles, InteractionResponseTypes, opcode, tcode
-from pydantic import BaseModel, Extra, Field, ValidationError, validator, fields
+from dubious.discord.enums import InteractionEventTypes, opcode, tcode
+from pydantic import BaseModel, Extra, Field, ValidationError
 
 
 class Snowflake(str):
@@ -15,16 +15,16 @@ class Snowflake(str):
         self.workerID = (self.id & 0x3E0000) >> 17
         self.processID = (self.id & 0x1F000) >> 12
         self.increment = self.id & 0xFFF
-    
+
     def __repr__(self):
         return str(self.id)
-    
+
     def __str__(self) -> str:
         return repr(self)
-    
+
     def __hash__(self):
         return self.id
-    
+
     def __eq__(self, o: object) -> bool:
         if not isinstance(o, self.__class__):
             try:
@@ -32,7 +32,7 @@ class Snowflake(str):
             except TypeError:
                 return False
         return o.id == self.id
-    
+
     def __ne__(self, o: object) -> bool:
         return not self == o
 
@@ -60,11 +60,11 @@ class Disc(BaseModel):
         except ValidationError as e:
             raise DiscError(self.__class__, data, e.json())
         #print(f"{self.__class__.__name__}:\n{data}\nactual:\n{self.debug()}\n")
-    
+
     class Config:
         underscore_attrs_are_private = False
         allow_population_by_field_name = True
-    
+
     def debug(self, tab=0, *, leadingNewline=True, ignoreNested=False):
         s = ""
         maxFieldLen = max(len(fieldName) for fieldName in self.__fields__)
@@ -111,7 +111,7 @@ class Payload(Disc):
     t: tcode | str | None
     s: int | None
     d: t_APIData
-    
+
     def __init__(self, **data: Any) -> None:
         super().__init__(**data)
         # We want to assign explicitly the data to d if it's a Disc,
@@ -120,15 +120,15 @@ class Payload(Disc):
             self.d = data["d"]
 
 class ErrorCodeMessage(Disc):
-    code: str
-    message: str
+    code: str | None
+    message: str | None
 class RequestError(Disc):
     errors: list[ErrorCodeMessage] = Field(alias="_errors")
 
 class ObjectError(Disc):
     class Config:
         extra = Extra.allow
-    
+
     def __init__(self, **data: Any) -> None:
         super().__init__(**data)
         for key, val in self:
@@ -137,7 +137,7 @@ class ObjectError(Disc):
 class ArrayError(Disc):
     class Config:
         extra = Extra.allow
-    
+
     items: list[ObjectError]
 
     def __init__(self, **data: Any):
@@ -160,23 +160,23 @@ class Activity(Disc):
 
     # not guaranteed
     url:            str                 | None
-    timestamps:    ActivityTimestamps  | None
+    timestamps:     ActivityTimestamps  | None
     application_id: Snowflake           | None
     details:        str                 | None
     state:          str                 | None
-    emoji:         ActivityEmoji       | None
-    party:         ActivityParty       | None
-    assets:        ActivityAssets      | None
-    secrets:       ActivitySecrets     | None
+    emoji:          ActivityEmoji       | None
+    party:          ActivityParty       | None
+    assets:         ActivityAssets      | None
+    secrets:        ActivitySecrets     | None
     instance:       bool                | None
     flags:          int                 | None
-    buttons:  list[ActivityButton]     | None
+    buttons:   list[ActivityButton]     | None
 
 # https://discord.com/developers/docs/topics/gateway#activity-object-activity-buttons
 class ActivityButton(Disc):
     # guaranteed
     label: str
-    url: str
+    url:   str
 
 # https://discord.com/developers/docs/topics/gateway#activity-object-activity-assets
 class ActivityAssets(Disc):
@@ -237,7 +237,7 @@ class Application(IDable):
     rpc_origins:     list[str]      | None
     terms_of_service_url: str       | None
     privacy_policy_url:   str       | None
-    owner:               User      | None
+    owner:                User      | None
     guild_id:             Snowflake | None
     primary_sku_id:       Snowflake | None
     slug:                 str       | None
@@ -255,7 +255,7 @@ class ApplicationCommand(IDable):
 
     # not guaranteed
     guild_id:                   Snowflake                  | None
-    options:              list[ApplicationCommandOption]  | None
+    options:               list[ApplicationCommandOption]  | None
     default_permission:         bool                       | None
     default_member_permissions: int                        | None
     type:                       int = 1
@@ -263,12 +263,12 @@ class ApplicationCommand(IDable):
 # https://discord.com/developers/docs/interactions/application-commands#application-command-object-application-command-option-structure
 class ApplicationCommandOption(Disc):
     # guaranteed
-    type: int
-    name: str
+    type:        int
+    name:        str
     description: str
 
     # not guaranteed
-    required:      bool                             | None
+    required:     bool                             | None
     choices: list[ApplicationCommandOptionChoice]  | None
     options: list[ApplicationCommandOption]        | None
 
@@ -307,9 +307,9 @@ class AuditLogEntry(IDable):
     user_id:     Snowflake | None = ... # type: ignore 
     action_type: int
     
-    changes: list[AuditLogEntryChange]  | None
-    options:      AuditLogEntryOptions   | None
-    reason:        str                   | None
+    changes: list[AuditLogEntryChange] | None
+    options:      AuditLogEntryOptions | None
+    reason:       str                  | None
 
 # https://discord.com/developers/docs/resources/audit-log#audit-log-change-object-audit-log-change-structure
 class AuditLogEntryChange(Disc):
@@ -343,7 +343,7 @@ class Channel(IDable):
     # not guaranteed
     guild_id:                      Snowflake       | None
     position:                      int             | None
-    permission_overwrites:   list[Overwrite]      | None
+    permission_overwrites:    list[Overwrite]      | None
     name:                          str             | None
     topic:                         str             | None
     nsfw:                          bool            | None
@@ -351,7 +351,7 @@ class Channel(IDable):
     bitrate:                       int             | None
     user_limit:                    int             | None
     rate_limit_per_user:           int             | None
-    recipients:              list[User]           | None
+    recipients:               list[User]           | None
     icon:                          str             | None
     owner_id:                      Snowflake       | None
     application_id:                Snowflake       | None
@@ -361,13 +361,10 @@ class Channel(IDable):
     video_quality_mode:            int             | None
     message_count:                 int             | None
     member_count:                  int             | None
-    thread_metadata:              ThreadMetadata | None
-    member:                       ThreadMember   | None
+    thread_metadata:               ThreadMetadata  | None
+    member:                        ThreadMember    | None
     default_auto_archive_duration: int             | None
     permissions:                   str             | None
-
-    def _mention(self):
-        return f"<#{self.id}>"
 
 # https://discord.com/developers/docs/resources/channel#channel-mention-object-channel-mention-structure
 class ChannelMention(IDable):
@@ -384,7 +381,7 @@ class ChannelPinsUpdate(Disc):
     channel_id: Snowflake
 
     # not guaranteed
-    guild_id:           Snowflake | None
+    guild_id:           Snowflake   | None
     last_pin_timestamp: dt.datetime | None
 
 # https://discord.com/developers/docs/topics/gateway#client-status-object
@@ -397,12 +394,12 @@ class ClientStatus(Disc):
 # https://discord.com/developers/docs/resources/channel#embed-object-embed-structure
 class Embed(Disc):
     # not guaranteed
-    title:        str            | None
-    type:         str            | None
-    description:  str            | None
-    url:          str            | None
-    timestamp:    dt.datetime    | None
-    color:        int            | None
+    title:       str            | None
+    type:        str            | None
+    description: str            | None
+    url:         str            | None
+    timestamp:   dt.datetime    | None
+    color:       int            | None
     footer:      EmbedFooter    | None
     image:       EmbedMedia     | None
     thumbnail:   EmbedMedia     | None
@@ -459,7 +456,7 @@ class Emoji(Disc):
     name: str | None
 
     roles:     list[Snowflake] | None
-    user:          User       | None
+    user:           User       | None
     require_colons: bool       | None
     managed:        bool       | None
     animated:       bool       | None
@@ -481,7 +478,7 @@ class Guild(IDable):
     verification_level:            int
     default_message_notifications: int
     explicit_content_filter:       int
-    roles:                   list[Role]
+    roles:                    list[Role]
     emojis:                   list[Emoji]
     features:                 list[str]
     mfa_level:                     int
@@ -498,23 +495,23 @@ class Guild(IDable):
     nsfw_level:                    int
 
     # guaranteed in GUILD_CREATE
-    widget_enabled:        bool          | None
-    widget_channel_id:     Snowflake     | None
-    joined_at:             str           | None
-    large:                 bool          | None
-    unavailable:           bool          | None
-    member_count:          int           | None
-    voice_states:    list[VoiceState]   | None
-    members:         list[Member]       | None
-    channels:        list[Channel]      | None
-    presences:       list[Presence]     | None
-    stage_instances: list[StageInstance]  | None
+    widget_enabled:       bool           | None
+    widget_channel_id:    Snowflake      | None
+    joined_at:            str            | None
+    large:                bool           | None
+    unavailable:          bool           | None
+    member_count:         int            | None
+    voice_states:    list[VoiceState]    | None
+    members:         list[Member]        | None
+    channels:        list[Channel]       | None
+    presences:       list[Presence]      | None
+    stage_instances: list[StageInstance] | None
     
     application_command_counts:   dict[int, int] | None
     premium_progress_bar_enabled: bool           | None
     application_command_count:    int            | None
     lazy:                         bool           | None
-    threads:                list[Channel]       | None
+    threads:                 list[Channel]       | None
     nsfw:                         bool           | None
 
     # not guaranteed
@@ -526,7 +523,7 @@ class Guild(IDable):
     max_video_channel_users:    int            | None
     approximate_member_count:   int            | None
     approximate_presence_count: int            | None
-    welcome_screen:            WelcomeScreen  | None
+    welcome_screen:             WelcomeScreen  | None
 
 # https://discord.com/developers/docs/topics/gateway#guild-emojis-update
 @t(tcode.GuildEmojisUpdate)
@@ -544,8 +541,8 @@ class GuildIntegrationsUpdate(Disc):
 class GuildMemberUpdate(Disc):
     guild_id:   Snowflake
     roles: list[Snowflake]
-    user:      User
-    avatar:     str | None
+    user:       User
+    avatar:     str         | None
     joined_at:  dt.datetime
 
     nick:                         str         | None
@@ -563,9 +560,9 @@ class GuildMembersChunk(Disc):
     chunk_index:   int
     chunk_count:   int
 
-    not_found: list             | None
-    presences: list[Presence]  | None
-    nonce:           str        | None
+    not_found: list           | None
+    presences: list[Presence] | None
+    nonce:          str       | None
 
 # https://discord.com/developers/docs/topics/gateway#guild-ban-add
 @t(tcode.GuildBanAdd)
@@ -575,7 +572,7 @@ class GuildMembersChunk(Disc):
 @t(tcode.GuildMemberRemove)
 class GuildMembershipChange(Disc):
     guild_id: Snowflake
-    user:    User
+    user:     User
 
 # https://discord.com/developers/docs/topics/gateway#guild-role-create
 @t(tcode.GuildRoleCreate)
@@ -585,12 +582,12 @@ class GuildMembershipChange(Disc):
 @t(tcode.GuildRoleDelete)
 class GuildRoleChange(Disc):
     guild_id: Snowflake
-    role:    Role
+    role:     Role
 
 # https://discord.com/developers/docs/topics/gateway#guild-stickers-update
 @t(tcode.GuildStickersUpdate)
 class GuildStickersUpdate(Disc):
-    guild_id:       Snowflake
+    guild_id:      Snowflake
     stickers: list[Sticker]
 
 # https://discord.com/developers/docs/topics/gateway#hello-hello-structure
@@ -610,12 +607,12 @@ class Integration(IDable):
     enable_emoticons:    bool                    | None
     expire_behavior:     int                     | None
     expire_grace_period: int                     | None
-    user:               User                    | None
-    account:            IntegrationAccount      | None
+    user:                User                    | None
+    account:             IntegrationAccount      | None
     synced_at:           str                     | None
     subscriber_count:    int                     | None
     revoked:             bool                    | None
-    application:        IntegrationApplication  | None
+    application:         IntegrationApplication  | None
 
 # https://discord.com/developers/docs/resources/guild#integration-account-object-integration-account-structure
 class IntegrationAccount(IDable):
@@ -639,17 +636,17 @@ class Interaction(IDable):
     # guaranteed
     id:             Snowflake
     application_id: Snowflake
-    type:           int
+    type:           InteractionEventTypes
     token:          str
     version:        int
 
     # not guaranteed
-    data:      InteractionData  | None
+    data:       InteractionData  | None
     guild_id:   Snowflake        | None
     channel_id: Snowflake        | None
-    member:    Member           | None
-    user:      User             | None
-    message:   Message          | None
+    member:     Member           | None
+    user:       User             | None
+    message:    Message          | None
 
 # https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object-interaction-data-structure
 class InteractionData(Disc):
@@ -659,8 +656,8 @@ class InteractionData(Disc):
     type: int       | None
     
     # not guaranteed for application command
-    resolved:     InteractionCommandDataResolved  | None
-    options: list[InteractionCommandDataOption]   | None
+    resolved:     InteractionCommandDataResolved | None
+    options: list[InteractionCommandDataOption]  | None
 
     # not guaranteed for component
     custom_id:       str            | None
@@ -675,16 +672,16 @@ class InteractionCommandDataOption(Disc):
     type: int
 
     # not guaranteed
-    value:         Any                          | None
-    options: list[InteractionCommandDataOption]  | None
+    value:        Any                           | None
+    options: list[InteractionCommandDataOption] | None
 
 # https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-object-resolved-data-structure
 class InteractionCommandDataResolved(Disc):
     # not guaranteed
-    users:    dict[Snowflake, User    | None]
-    members:  dict[Snowflake, Member  | None]
-    roles:    dict[Snowflake, Role    | None]
-    channels: dict[Snowflake, Channel | None]
+    users:    dict[Snowflake, User]    | None
+    members:  dict[Snowflake, Member]  | None
+    roles:    dict[Snowflake, Role]    | None
+    channels: dict[Snowflake, Channel] | None
 
 # https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-response-object-interaction-response-structure
 class InteractionResponse(Disc):
@@ -700,7 +697,7 @@ class InteractionResponseData(Disc):
     embeds:      list[Embed]
     allowed_mentions: AllowedMentions
     flags:            int
-    components: list[MessageComponent]
+    components:  list[MessageComponent]
 
 # https://discord.com/developers/docs/topics/gateway#invite-create
 @t(tcode.InviteCreate)
@@ -714,9 +711,9 @@ class InviteCreate(Disc):
     temporary:  bool
     uses:       int
     # not guaranteed
-    guild_id:            Snowflake           | None
+    guild_id:           Snowflake           | None
     inviter:            User                | None
-    target_type:         int                 | None
+    target_type:        int                 | None
     target_user:        User                | None
     target_application: PartialApplication  | None
 
@@ -730,7 +727,7 @@ class Member(Disc):
     # not guaranteed
     deaf:          bool  | None
     mute:          bool  | None
-    user:         User  | None
+    user:          User  | None
     nick:          str   | None
     premium_since: str   | None
     pending:       bool  | None
@@ -740,9 +737,6 @@ class Member(Disc):
     # https://discord.com/developers/docs/topics/gateway#guild-member-add-guild-member-add-extra-fields
     # only with tcode.GuildMemberAdd
     guild_id:      Snowflake | None
-
-    def checkRoles(self, roles: list[Snowflake]):
-        return any([role in self.roles for role in roles])
 
 # https://discord.com/developers/docs/resources/channel#message-object-message-structure
 # https://discord.com/developers/docs/topics/gateway#message-create
@@ -766,21 +760,21 @@ class Message(IDable):
     pinned:             bool
     type:               int
     # not guaranteed
-    guild_id:              Snowflake           | None
-    member:                Member              | None
-    mention_channels: list[ChannelMention]     | None
-    reactions:       list[Reaction]           | None
-    webhook_id:            Snowflake           | None
-    activity:             MessageActivity     | None
-    application:           Application         | None
-    application_id:        Snowflake           | None
-    message_reference:    MessageReference    | None
-    flags:                 int                 | None
-    stickers:        list[Sticker]            | None
-    referenced_message:   Message             | None
-    interaction:          MessageInteraction  | None
-    thread:                Channel             | None
-    components:      list[MessageComponent]   | None
+    guild_id:              Snowflake          | None
+    member:                Member             | None
+    mention_channels: list[ChannelMention]    | None
+    reactions:        list[Reaction]          | None
+    webhook_id:            Snowflake          | None
+    activity:              MessageActivity    | None
+    application:           Application        | None
+    application_id:        Snowflake          | None
+    message_reference:     MessageReference   | None
+    flags:                 int                | None
+    stickers:         list[Sticker]           | None
+    referenced_message:    Message            | None
+    interaction:           MessageInteraction | None
+    thread:                Channel            | None
+    components:       list[MessageComponent]  | None
 
     def jump_url(self):
         return f"https://discordapp.com/channels/{self.guild_id}/{self.channel_id}/{self.id}"
@@ -797,23 +791,23 @@ class MessageComponent(Disc):
     # guaranteed
     type: int
     # not guaranteed
-    style:            int                | None
-    label:            str                | None
-    emoji:            Emoji              | None
-    custom_id:        str                | None
-    url:              str                | None
-    options:    list[SelectOption]      | None
-    disabled:         bool               | None
-    placeholder:      str                | None
-    min_values:       int                | None
-    max_values:       int                | None
-    components: list[MessageComponent]  | None
+    style:           int               | None
+    label:           str               | None
+    emoji:           Emoji             | None
+    custom_id:       str               | None
+    url:             str               | None
+    options:    list[SelectOption]     | None
+    disabled:        bool              | None
+    placeholder:     str               | None
+    min_values:      int               | None
+    max_values:      int               | None
+    components: list[MessageComponent] | None
 
 # https://discord.com/developers/docs/topics/gateway#message-delete
 @t(tcode.MessageDelete)
 class MessageDelete(IDable):
     # guaranteed
-    id: Snowflake
+    id:         Snowflake
     channel_id: Snowflake
     # not guaranteed
     guild_id: Snowflake | None
@@ -865,7 +859,7 @@ class PartialApplication(IDable):
 @t(tcode.PresenceUpdate)
 class Presence(Disc):
     # guaranteed
-    user:           User
+    user:            User
     guild_id:        Snowflake
     status:          str
     activities: list[Activity]
@@ -898,7 +892,7 @@ class Role(IDable):
     managed:     bool
     mentionable: bool
 
-    tags:         RoleTags  | None
+    tags:          RoleTags  | None
     unicode_emoji: str       | None
     icon:          Emoji     | None
 
@@ -945,7 +939,7 @@ class Sticker(IDable):
     pack_id:    Snowflake | None
     available:  bool      | None
     guild_id:   Snowflake | None
-    user:      User      | None
+    user:       User      | None
     sort_value: int       | None
 
 # https://discord.com/developers/docs/resources/channel#thread-member-object-thread-member-structure
@@ -1005,9 +999,6 @@ class User(IDable):
     premium_type: int  | None
     public_flags: int  | None
 
-    def mention(self):
-        return f"<@{self.id}>"
-
 # https://discord.com/developers/docs/resources/voice#voice-state-object-voice-state-structure
 class VoiceState(Disc):
     channel_id:                 Snowflake | None = ... #type: ignore
@@ -1049,7 +1040,7 @@ class WebhooksUpdate(Disc):
 
 # https://discord.com/developers/docs/resources/guild#welcome-screen-object-welcome-screen-structure
 class WelcomeScreen(Disc):
-    description:            str                  | None = ... #type: ignore
+    description:           str                   | None = ... #type: ignore
     welcome_channels: list[WelcomeScreenChannel]
 
 # https://discord.com/developers/docs/resources/guild#welcome-screen-object-welcome-screen-channel-structure

@@ -1,6 +1,15 @@
 
+import re
 from pydantic import validator
 from dubious.discord import api, enums
+
+pat_Snowflake = re.compile(r".*(\d+).*")
+class Snowflake(api.Snowflake):
+    def __init__(self, r: str):
+        match = re.match(pat_Snowflake, r)
+        if not match: raise ValueError()
+        fixed, = match.groups()
+        super().__init__(fixed)
 
 class Identify(api.Disc):
     token:      str
@@ -23,6 +32,17 @@ class CommandOption(api.Disc):
 
     required: bool
     choices: list[CommandOptionChoice] | None
+    
+    def eq(self, o: object) -> bool:
+        if isinstance(o, api.ApplicationCommandOption):
+            return (
+                self.name == o.name and
+                self.type == o.type and
+                self.description == o.description and
+                self.required == o.required and
+                self.choices == o.choices
+            )
+        return self == o
 
 class Command(api.Disc):
     name: str
@@ -30,6 +50,15 @@ class Command(api.Disc):
     description: str
     options: list[CommandOption] | None
     guildID: api.Snowflake | None
+
+    def eq(self, other: api.ApplicationCommand):
+        return (
+            self.name == other.name and
+            self.type == other.type and
+            self.description == other.description and
+            (all([option.eq(otheroption) for option, otheroption in zip(self.options, other.options)]) if self.options and other.options else self.options == other.options) and
+            self.guildID == other.guild_id
+        )
 
 class Noneable(api.Disc):
     class Config:

@@ -2,6 +2,8 @@
 from enum import Enum
 from typing import Literal
 
+IxnOriginal: Literal["@original"] = "@original"
+Empty = "** **"
 
 class opcode(int, Enum):
     Dispatch            = 0
@@ -73,6 +75,9 @@ class tcode(str, Enum):
     VoiceServerUpdate =          "VOICE_SERVER_UPDATE"
     WebhooksUpdate =             "WEBHOOKS_UPDATE"
 
+    Disconnect = "DISCONNECT"
+
+codes = opcode | tcode
 
 
 class ApplicationCommandTypes(int, Enum):
@@ -108,12 +113,11 @@ class CommandOptionTypes(int, Enum):
     Integer         = 4
     Boolean         = 5
     User            = 6
+    Member          = 6
     Channel         = 7
     Role            = 8
     Mentionable     = 9
     Number          = 10
-
-Empty = "** **"
 
 class Intents(int, Enum):
     Guilds = 1 << 0
@@ -136,6 +140,8 @@ class InteractionEventTypes(int, Enum):
     Ping               = 1
     ApplicationCommand = 2
     MessageComponent   = 3
+    Autocomplete       = 4
+    ModalSubmit        = 5
 
 class InteractionResponseTypes(int, Enum):
     """ https://discord.com/developers/docs/interactions/receiving-and-responding#interaction-response-object-interaction-callback-type """
@@ -187,8 +193,6 @@ class IdentifyPermissions(int, Enum):
     UseExternalStickers =     1 << 37
     SendMessagesInThreads =   1 << 38
     StartEmbeddedActivities = 1 << 39
-
-IxnOriginal: Literal["@original"] = "@original"
 
 class JSONErrorCode(int, Enum):
     """ https://discord.com/developers/docs/topics/opcodes-and-status-codes#json """

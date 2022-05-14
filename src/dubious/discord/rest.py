@@ -291,3 +291,8 @@ class Http:
         return await self.request(
             hdrs.METH_DELETE, api.Message, Expects.none,
             self.url.webhookMessages(self.id, token, messageID))
+    
+    async def getGuild(self, id: api.Snowflake):
+        return await self.request(
+            hdrs.METH_GET, api.Guild, Expects.single,
+            self.url.guilds(id) )

@@ -109,6 +109,9 @@ class Pory:
 
 class Pory2(Pory):
     doPrintCommands: ClassVar = True
+    def printCommand(self, *message):
+        if self.doPrintCommands:
+            print(*message)
 
     @HM(enums.tcode.Ready)
     async def _registerCommands(self, _):
@@ -129,14 +132,12 @@ class Pory2(Pory):
             await self._processPendingCommand(createCommand, regdGlobally, regdGuildly)
 
         for remainingCommand in regdGlobally.values():
-            if self.doPrintCommands:
-                print(f"deleting `{remainingCommand.name}`")
+            self.printCommand(f"deleting `{remainingCommand.name}`")
             await self.http.deleteCommand(remainingCommand.id)
 
         for guildID in regdGuildly:
             for remainingGuildCommand in regdGuildly[guildID].values():
-                if self.doPrintCommands:
-                    print(f"deleting `{remainingGuildCommand.name}` from guild {remainingGuildCommand.guild_id}")
+                self.printCommand(f"deleting `{remainingGuildCommand.name}` from guild {remainingGuildCommand.guild_id}")
                 await self.http.deleteGuildCommand(guildID, remainingGuildCommand.id)
 
     async def _processPendingCommand(self,
@@ -149,39 +150,32 @@ class Pory2(Pory):
     ):
         if pendingCommand.guildID:
             if not pendingCommand.guildID in regdGuildly:
-                if self.doPrintCommands:
-                    print(f"creating `{pendingCommand.name}` in guild {pendingCommand.guildID}")
+                self.printCommand(f"creating `{pendingCommand.name}` in guild {pendingCommand.guildID}")
                 return await self.http.postGuildCommand(pendingCommand.guildID, pendingCommand)
 
             regdCommands = regdGuildly[pendingCommand.guildID]
             if not pendingCommand.name in regdCommands:
-                if self.doPrintCommands:
-                    print(f"creating `{pendingCommand.name}` in guild {pendingCommand.guildID}")
+                self.printCommand(f"creating `{pendingCommand.name}` in guild {pendingCommand.guildID}")
                 return await self.http.postGuildCommand(pendingCommand.guildID, pendingCommand)
 
             regdCommand = regdCommands.pop(pendingCommand.name)
             if pendingCommand.eq(regdCommand):
-                if self.doPrintCommands:
-                    print(f"matched  `{pendingCommand.name}` in guild {pendingCommand.guildID}")
+                self.printCommand(f"matched  `{pendingCommand.name}` in guild {pendingCommand.guildID}")
                 return
 
-            if self.doPrintCommands:
-                print(f"patching `{pendingCommand.name}` in guild {pendingCommand.guildID}")
+            self.printCommand(f"patching `{pendingCommand.name}` in guild {pendingCommand.guildID}")
             return await self.http.patchGuildCommand(pendingCommand.guildID, regdCommand.id, pendingCommand)
 
         if not pendingCommand.name in regdGlobally:
-            if self.doPrintCommands:
-                print(f"creating `{pendingCommand.name}`")
+            self.printCommand(f"creating `{pendingCommand.name}`")
             return await self.http.postCommand(pendingCommand)
 
         regdCommand = regdGlobally.pop(pendingCommand.name)
         if pendingCommand.eq(regdCommand):
-            if self.doPrintCommands:
-                print(f"matched  `{pendingCommand.name}`")
+            self.printCommand(f"matched  `{pendingCommand.name}`")
             return
 
-        if self.doPrintCommands:
-            print(f"patching `{pendingCommand.name}`")
+        self.printCommand(f"patching `{pendingCommand.name}`")
         return await self.http.patchCommand(regdCommand.id, pendingCommand)
 
     @HM(api.tcode.InteractionCreate)

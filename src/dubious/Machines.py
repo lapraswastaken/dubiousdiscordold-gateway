@@ -1,7 +1,11 @@
 
 
+import abc
 import inspect
 from typing import Any, Callable, Concatenate, Coroutine, TypeVar
+from typing_extensions import Self
+
+from pydantic import Field
 from dubious.Interaction import Ixn
 
 from dubious.Register import OrderedRegister, Register, t_Params
@@ -12,7 +16,7 @@ t_BoundData = TypeVar("t_BoundData", bound=a_Data)
 a_HandleCallback = Callable[[t_BoundData], Coroutine[Any, Any, None]]
 a_HandleReference = enums.opcode | enums.tcode
 
-class HM(OrderedRegister[a_HandleReference]):
+class Hidden(OrderedRegister[a_HandleReference]):
     func: a_HandleCallback[a_Data]
     # The code that the handler will be attached to.
     code: a_HandleReference
@@ -26,36 +30,56 @@ class HM(OrderedRegister[a_HandleReference]):
     def reference(self):
         return self.code
 
-class Dumps:
-    def dump(self):
-        pass
+class Technical(abc.ABC):
+    name: str
+    description: str
+    type: int
+    options: list["Technical"] = Field(default_factory=list)
 
+    def __init__(self, name: str, description: str, type: int, options: list["Technical"]):
+        self.name = name
+        self.description = description
+        self.type = type
+        self.options = options
+
+    def getOptionsByName(self):
+        return {option.name: option for option in self.options}
+
+    def reference(self):
+        return self.name
+
+    @classmethod
+    def getPartsFromDObj(cls, dobj: api.ApplicationCommand | api.ApplicationCommandOption):
+        return dict(
+            name=dobj.name,
+            description=dobj.description,
+            type=dobj.type,
+            options=[Option.fromDiscord(
+                opt
+            ) for opt in (dobj.options if dobj.options else [])],
+        )
+
+    @classmethod
+    def fromDiscord(cls, dobj: api.ApplicationCommand | api.ApplicationCommandOption):
+        return cls(
+            **cls.getPartsFromDObj(dobj)
+        )
+
+a_TechnicalReference = str
 t_TMCallback = Callable[
     Concatenate[Any, Ixn, t_Params],
         Coroutine[Any, Any, Any]
 ]
-a_TMReference = str
-class TR(Register[a_TMReference]):
+class Record(Technical, Register[a_TechnicalReference]):
+    """ A class that decorates chat input commands. """
 
-    name: str
-    description: str
-    options: list["Option"]
-    guildID: api.Snowflake | None
+    type = enums.ApplicationCommandTypes.ChatInput
 
-    def __init__(self,
-        name: str,
-        description: str,
-        options: list["Option"] | None=None,
-        guildID: api.Snowflake | int | None=None
-    ):
-        self.name = name
-        self.description = description
-        self.options = options if options else []
-        self._options = {option.name: option for option in self.options}
+    guildID: api.Snowflake | None = None
+
+    def __init__(self, name: str, description: str, options: list["Technical"] | None=None, guildID: api.Snowflake | int | str | None=None):
+        super().__init__(name, description, enums.ApplicationCommandTypes.ChatInput, options if options else [])
         self.guildID = api.Snowflake(guildID) if guildID else None
-
-    def reference(self):
-        return self.name
 
     def __call__(self, func: t_TMCallback[t_Params]):
         # Perform a quick check to see if all extra parameters in the function
@@ -73,52 +97,35 @@ class TR(Register[a_TMReference]):
         return super().__call__(func)
 
     def getOption(self, name: str):
-        return self._options.get(name)
+        return self.getOptionsByName().get(name)
 
-    def dump(self):
-        return make.Command(
-            name=self.name,
-            type=enums.ApplicationCommandTypes.ChatInput,
-            description=self.description,
-            options=[option.dump() for option in self.options] if self.options else None,
-            guildID=self.guildID
+    @classmethod
+    def getPartsFromObj(cls, dobj: api.ApplicationCommand):
+        return dict(
+            **super().getPartsFromDObj(dobj),
+            guild_id=dobj.guild_id,
         )
 
-class Option(Dumps):
-    name: str
-    description: str
-    type: enums.CommandOptionTypes
+class Option(Technical):
     required: bool
-    choices: list["Choice"]
+    choices: list["Choice"] = Field(default_factory=list)
 
-    def __init__(self, name: str, description: str, typ: enums.CommandOptionTypes, required: bool=True, choices: list | None=None):
-        self.name = name
-        self.description = description
-        self.type = typ
+    def __init__(self, name: str, description: str, type: enums.CommandOptionTypes, options: list["Technical"] | None=None, required: bool=True, choices: list["Choice"] | None=None):
+        super().__init__(name, description, enums.ApplicationCommandTypes.ChatInput, options if options else [])
         self.required = required
         self.choices = choices if choices else []
 
-    def dump(self):
-        return make.CommandOption(
-            name=self.name,
-            description=self.description,
-            type=self.type,
-            required=self.required,
-            choices=[
-                choice.dump() for choice in self.choices
-            ] if self.choices else None
+    @classmethod
+    def getPartsFromDObj(cls, dobj: api.ApplicationCommandOption):
+        return dict(
+            **super().getPartsFromDObj(dobj),
+            required=dobj.required if dobj.required is not None else False,
+            choices=[Choice(
+                name=dchoice.name,
+                value=dchoice.value
+            ) for dchoice in (dobj.choices if dobj.choices else [])],
         )
 
-class Choice(Dumps):
-    name: str
+class Choice(api.Disc):
+    name:  str
     value: Any
-
-    def __init__(self, name: str, value: Any):
-        self.name = name
-        self.value = value
-
-    def dump(self):
-        return make.CommandOptionChoice(
-            name=self.name,
-            value=self.value
-        )

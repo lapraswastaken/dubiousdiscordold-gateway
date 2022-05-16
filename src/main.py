@@ -1,6 +1,6 @@
 
 import re
-from dubious import TR, Chip, Ixn, Option, Pory2, api, enums
+from dubious import Record, Chip, Ixn, Option, Pory2, api, enums
 
 p_Tag = re.compile(r"<.(\d+)>")
 
@@ -15,28 +15,28 @@ class mu2OS(Pory2):
         super().__init__()
         self.count = 0
 
-    @TR("ping", "Responds with 'Pong!'", guildID=798023066718175252)
+    @Record("ping", "Responds with 'Pong!'", guildID=798023066718175252)
     async def ping(self, ixn: Ixn):
         await ixn.respond("Pong!")
 
-    @TR("inc", "Increments and then prints a number.", guildID=798023066718175252)
+    @Record("inc", "Increments and then prints a number.", guildID=798023066718175252)
     async def inc(self, ixn: Ixn):
         self.count += 1
         await ixn.respond(f"Number is now at {self.count}.")
 
-    @TR("cat", "Repeats a given message.", [
+    @Record("cat", "Repeats a given message.", [
         Option("message", "The message to repeat.", enums.CommandOptionTypes.String)
     ], guildID=798023066718175252)
     async def cat(self, ixn: Ixn, message: str):
         await ixn.respond(message)
 
-    @TR("greet", "Says \"Hello!\" to another user.", [
+    @Record("greet", "Says \"Hello!\" to another user.", [
         Option("user", "The user to greet.", enums.CommandOptionTypes.User)
     ], guildID=798023066718175252)
     async def greet(self, ixn: Ixn, user: api.User):
         await ixn.respond(f"Hello, {user.username}!", silent=True)
 
-    @TR("id", "Gives the ID of the mentioned Discord tag (user/member, channel, or role).", [
+    @Record("id", "Gives the ID of the mentioned Discord tag (user/member, channel, or role).", [
         Option("tag", "Any Discord tag.", enums.CommandOptionTypes.String)
     ], guildID=798023066718175252)
     async def id_(self, ixn: Ixn, tag: str):

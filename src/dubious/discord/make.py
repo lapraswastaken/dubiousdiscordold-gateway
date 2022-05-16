@@ -1,5 +1,7 @@
 
 import re
+from typing import TypeGuard
+from typing_extensions import Self
 from pydantic import validator
 from dubious.discord import api, enums
 
@@ -20,45 +22,6 @@ class Resume(api.Disc):
     token: str
     session: str
     seq: int | None
-
-class CommandOptionChoice(api.Disc):
-    name: str
-    value: str
-
-class CommandOption(api.Disc):
-    name: str
-    type: int
-    description: str
-
-    required: bool
-    choices: list[CommandOptionChoice] | None
-    
-    def eq(self, o: object) -> bool:
-        if isinstance(o, api.ApplicationCommandOption):
-            return (
-                self.name == o.name and
-                self.type == o.type and
-                self.description == o.description and
-                self.required == o.required and
-                self.choices == o.choices
-            )
-        return self == o
-
-class Command(api.Disc):
-    name: str
-    type: int
-    description: str
-    options: list[CommandOption] | None
-    guildID: api.Snowflake | None
-
-    def eq(self, other: api.ApplicationCommand):
-        return (
-            self.name == other.name and
-            self.type == other.type and
-            self.description == other.description and
-            (all([option.eq(otheroption) for option, otheroption in zip(self.options, other.options)]) if self.options and other.options else self.options == other.options) and
-            self.guildID == other.guild_id
-        )
 
 class Noneable(api.Disc):
     class Config:
@@ -93,18 +56,18 @@ class Field(Noneable):
 class Embed(Noneable):
     type:        str = "rich"
 
-    title:       str               | None = None
-    description: str               | None = None
-    url:         str               | None = None
-    timestamp:   str               | None = None
-    color:       int               | None = None
-    footer:      Footer          | None = None
-    image:       Media           | None = None
-    thumbnail:   Media           | None = None
-    video:       Media           | None = None
-    provider:    Provider        | None = None
-    author:      Author          | None = None
-    fields:      list[Field]     | None = None
+    title:       str         | None = None
+    description: str         | None = None
+    url:         str         | None = None
+    timestamp:   str         | None = None
+    color:       int         | None = None
+    footer:      Footer      | None = None
+    image:       Media       | None = None
+    thumbnail:   Media       | None = None
+    video:       Media       | None = None
+    provider:    Provider    | None = None
+    author:      Author      | None = None
+    fields:      list[Field] | None = None
 
 class Emoji(Noneable):
     name: str       | None

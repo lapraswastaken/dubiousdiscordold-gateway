@@ -1,9 +1,12 @@
 
+from __future__ import annotations
+
 import re
-from typing import TypeGuard
-from typing_extensions import Self
 from pydantic import validator
 from dubious.discord import api, enums
+
+class Make(api.Disc):
+    pass
 
 pat_Snowflake = re.compile(r".*(\d+).*")
 class Snowflake(api.Snowflake):
@@ -13,17 +16,71 @@ class Snowflake(api.Snowflake):
         fixed, = match.groups()
         super().__init__(fixed)
 
-class Identify(api.Disc):
+class Identify(Make):
     token:      str
     intents:    int
     properties: dict
 
-class Resume(api.Disc):
+class Resume(Make):
     token: str
     session: str
     seq: int | None
 
-class Noneable(api.Disc):
+class CommandOptionChoice(Make):
+    name: str
+    value: str
+
+    def eq(self, o: api.ApplicationCommandOptionChoice):
+        return (
+            self.name == o.name and
+            self.value == o.value
+        )
+
+class CommandPart(Make):
+    name: str
+    description: str
+    type: enums.ApplicationCommandTypes | enums.CommandOptionTypes
+    options: list[CommandPart]
+
+    def eq(self, o: api.ApplicationCommand | api.ApplicationCommandOption) -> bool:
+        return (
+            self.name == o.name and
+            self.type == o.type and
+            self.description == o.description and
+            (
+                all([option.eq(otheroption)
+                    for option, otheroption in zip(self.options, o.options)]
+                ) if self.options and o.options
+                    else None == o.options
+            )
+        )
+
+class CommandOption(CommandPart):
+    required: bool | None
+    choices: list[CommandOptionChoice]
+
+    def eq(self, o: api.ApplicationCommandOption) -> bool:
+        return (
+            super().eq(o) and
+            self.required == o.required and
+            (
+                all([choice.eq(otherchoice)
+                    for choice, otherchoice in zip(self.choices, o.choices)]
+                ) if self.choices and o.choices
+                    else None == o.choices
+            )
+        )
+
+class Command(CommandPart):
+    guildID: api.Snowflake | None
+
+    def eq(self, o: api.ApplicationCommand):
+        return (
+            super().eq(o) and
+            self.guildID == o.guild_id
+        )
+
+class Noneable(Make):
     class Config:
         exclude_none = True
 
@@ -128,7 +185,7 @@ class Dropdown(Component):
     max_values:  int | None = None
     disabled: bool = False
 
-class Message(api.Disc):
+class Message(Make):
     content:          str        | None = None
     file:             bytes      | None = None
     reference:        str        | None = None
@@ -136,7 +193,7 @@ class Message(api.Disc):
     components:  list[Component] | None = None
     tts: bool = False
 
-class CallbackData(api.Disc):
+class CallbackData(Make):
     pass
 
 class RMessage(CallbackData):
@@ -154,6 +211,8 @@ class Modal(CallbackData):
     title:     str
     components: list[Component]
 
-class Response(api.Disc):
+class Response(Make):
     type: enums.InteractionResponseTypes
     data: CallbackData
+
+api.fuckyoupydantic(Make)

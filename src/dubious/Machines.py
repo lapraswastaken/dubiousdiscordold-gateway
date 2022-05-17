@@ -2,10 +2,10 @@
 
 import abc
 import inspect
-from typing import Any, Callable, Concatenate, Coroutine, TypeVar
+from typing import Any, Callable, Concatenate, Coroutine, Generic, TypeVar
 from typing_extensions import Self
 
-from pydantic import Field
+from pydantic import Field, PrivateAttr
 from dubious.Interaction import Ixn
 
 from dubious.Register import OrderedRegister, Register, t_Params
@@ -30,58 +30,19 @@ class Hidden(OrderedRegister[a_HandleReference]):
     def reference(self):
         return self.code
 
-class Technical(abc.ABC):
-    name: str
-    description: str
-    type: int
-    options: list["Technical"] = Field(default_factory=list)
+a_RecordReference = str
 
-    def __init__(self, name: str, description: str, type: int, options: list["Technical"]):
-        self.name = name
-        self.description = description
-        self.type = type
-        self.options = options
-
-    def getOptionsByName(self):
-        return {option.name: option for option in self.options}
-
-    def reference(self):
-        return self.name
-
-    @classmethod
-    def getPartsFromDObj(cls, dobj: api.ApplicationCommand | api.ApplicationCommandOption):
-        return dict(
-            name=dobj.name,
-            description=dobj.description,
-            type=dobj.type,
-            options=[Option.fromDiscord(
-                opt
-            ) for opt in (dobj.options if dobj.options else [])],
-        )
-
-    @classmethod
-    def fromDiscord(cls, dobj: api.ApplicationCommand | api.ApplicationCommandOption):
-        return cls(
-            **cls.getPartsFromDObj(dobj)
-        )
-
-a_TechnicalReference = str
 t_TMCallback = Callable[
     Concatenate[Any, Ixn, t_Params],
         Coroutine[Any, Any, Any]
 ]
-class Record(Technical, Register[a_TechnicalReference]):
-    """ A class that decorates chat input commands. """
+class Machine(Register[a_RecordReference], make.CommandPart, abc.ABC):
+    _func: t_TMCallback = PrivateAttr()
 
-    type = enums.ApplicationCommandTypes.ChatInput
+    def reference(self) -> a_RecordReference:
+        return self.name
 
-    guildID: api.Snowflake | None = None
-
-    def __init__(self, name: str, description: str, options: list["Technical"] | None=None, guildID: api.Snowflake | int | str | None=None):
-        super().__init__(name, description, enums.ApplicationCommandTypes.ChatInput, options if options else [])
-        self.guildID = api.Snowflake(guildID) if guildID else None
-
-    def __call__(self, func: t_TMCallback[t_Params]):
+    def __call__(self, func: t_TMCallback[t_Params]) -> Self:
         # Perform a quick check to see if all extra parameters in the function
         #  signature exist in the options list.
         sig = inspect.signature(func)
@@ -96,36 +57,80 @@ class Record(Technical, Register[a_TechnicalReference]):
                 raise AttributeError(f"Parameter {paramName} was found in this command's function's signature, but it wasn't found in this command's options.")
         return super().__call__(func)
 
+    async def call(self, owner: Any, ixn: Ixn, **kwargs):
+        subcommands: list[Machine] = []
+        toRemove: list[str] = []
+        for kwargname, kwarg in kwargs.items():
+            if isinstance(kwarg, Machine):
+                subcommands.append(kwarg)
+                toRemove.append(kwargname)
+        for remove in toRemove:
+            kwargs.pop(remove)
+        await super().call(owner, ixn, **kwargs)
+        for subcommand in subcommands:
+            await subcommand.call(owner, ixn, **kwargs)
+
+    @classmethod
+    @abc.abstractmethod
+    def make(cls,
+        name: str,
+        description: str,
+        type: enums.ApplicationCommandTypes | enums.CommandOptionTypes,
+        options: list[make.CommandPart] | None=None,
+    **kwargs) -> Self:
+        return cls(
+            name=name,
+            description=description,
+            type=type,
+            options=options if options else [],
+            **kwargs
+        )
+
+class Command(Machine, make.Command):
+    """ A class that decorates chat input commands. """
+
+    @classmethod
+    def make(cls,
+        name: str,
+        description: str,
+        options: list[make.CommandPart] | None=None,
+        guildID: api.Snowflake | int | str | None=None
+    ):
+        return super().make(
+            name=name,
+            description=description,
+            type=enums.ApplicationCommandTypes.ChatInput,
+            options=options if options else [],
+            guildID=api.Snowflake(guildID) if guildID else None,
+        )
+
+    def getOptionsByName(self):
+        return {option.name: option for option in self.options}
+
     def getOption(self, name: str):
         return self.getOptionsByName().get(name)
 
-    @classmethod
-    def getPartsFromObj(cls, dobj: api.ApplicationCommand):
-        return dict(
-            **super().getPartsFromDObj(dobj),
-            guild_id=dobj.guild_id,
-        )
+    def subcommand(self, command: "Command"):
+        option = Option.make(command.name, command.description, enums.CommandOptionTypes.SubCommand, None)
+        option.__call__(command._func)
+        self.options.append(option)
+        return option
 
-class Option(Technical):
-    required: bool
-    choices: list["Choice"] = Field(default_factory=list)
-
-    def __init__(self, name: str, description: str, type: enums.CommandOptionTypes, options: list["Technical"] | None=None, required: bool=True, choices: list["Choice"] | None=None):
-        super().__init__(name, description, enums.ApplicationCommandTypes.ChatInput, options if options else [])
-        self.required = required
-        self.choices = choices if choices else []
+class Option(Machine, make.CommandOption):
 
     @classmethod
-    def getPartsFromDObj(cls, dobj: api.ApplicationCommandOption):
-        return dict(
-            **super().getPartsFromDObj(dobj),
-            required=dobj.required if dobj.required is not None else False,
-            choices=[Choice(
-                name=dchoice.name,
-                value=dchoice.value
-            ) for dchoice in (dobj.choices if dobj.choices else [])],
+    def make(cls, name: str, description: str, type: enums.CommandOptionTypes, required: bool | None=True, choices: list[make.CommandOptionChoice] | None=None):
+        return super().make(
+            name=name,
+            description=description,
+            type=type,
+            required=required,
+            choices=choices if choices else [],
+            options=[]
         )
 
-class Choice(api.Disc):
-    name:  str
-    value: Any
+def Choice(name: str, value: Any):
+    return make.CommandOptionChoice(
+        name=name,
+        value=value
+    )

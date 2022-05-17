@@ -15,7 +15,7 @@ t_Reference = TypeVar("t_Reference", bound=Hashable)
 class Register(abc.ABC, Generic[t_Reference]):
     """ A decorator class for functions that need to be referenced by
         classes by values other than the assigned method name. """
-    func: a_Callback
+    _func: a_Callback
 
     __all__: dict[type, dict[t_Reference, Self]]
 
@@ -52,12 +52,12 @@ class Register(abc.ABC, Generic[t_Reference]):
 
     def __call__(self, func: a_Callback):
         """ Makes instances of this class operate like decorators. """
-        self.func = func
+        self._func = func
         return self
 
     async def call(self, owner: Any, *args, **kwargs):
         """ Call the function tied to this Register. """
-        await self.func(owner, *args, **kwargs)
+        await self._func(owner, *args, **kwargs)
 
 class OrderedRegister(Register[t_Reference]):
     order: int

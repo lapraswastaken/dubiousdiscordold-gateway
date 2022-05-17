@@ -6,7 +6,7 @@ from typing_extensions import Self
 from dubious.discord import api, enums, make, rest
 from dubious.discord.core import Core, Discore
 from dubious.Interaction import Ixn
-from dubious.Machines import Record, Hidden, Option
+from dubious.Machines import Command, Hidden, Machine
 
 t_Handler = Callable[
     [enums.codes, api.Payload],
@@ -110,7 +110,7 @@ class Pory:
         self.http = rest.Http(self.user.id, self.token)
 
 class Pory2(Pory):
-    supercommand: ClassVar[Record | None] = None
+    supercommand: ClassVar[Command | None] = None
 
     doPrintCommands: ClassVar = True
     def printCommand(self, *message):
@@ -131,13 +131,8 @@ class Pory2(Pory):
         for guildID in self.guildIDs:
             regdGuildly[guildID] = dictify(await self.http.getGuildCommands(guildID))
 
-        if self.supercommand:
-            for pendingCommand in Record.get(self).values():
-                self.supercommand.options.append(pendingCommand)
-            await self._processPendingCommand(self.supercommand, regdGlobally, regdGuildly)
-        else:
-            for pendingCommand in Record.get(self).values():
-                await self._processPendingCommand(pendingCommand, regdGlobally, regdGuildly)
+        for pendingCommand in Command.get(self).values():
+            await self._processPendingCommand(pendingCommand, regdGlobally, regdGuildly)
 
         for remainingCommand in regdGlobally.values():
             self.printCommand(f"deleting `{remainingCommand.name}`")
@@ -149,7 +144,7 @@ class Pory2(Pory):
                 await self.http.deleteGuildCommand(guildID, remainingGuildCommand.id)
 
     async def _processPendingCommand(self,
-        pendingCommand: Record,
+        pendingCommand: make.Command,
         regdGlobally: dict[str,
             api.ApplicationCommand],
         regdGuildly: dict[api.Snowflake,
@@ -167,7 +162,7 @@ class Pory2(Pory):
                 return await self.http.postGuildCommand(pendingCommand.guildID, pendingCommand)
 
             regdCommand = regdCommands.pop(pendingCommand.name)
-            if pendingCommand == Record.fromDiscord(regdCommand):
+            if pendingCommand.eq(regdCommand):
                 self.printCommand(f"matched  `{pendingCommand.name}` in guild {pendingCommand.guildID}")
                 return
 
@@ -179,7 +174,7 @@ class Pory2(Pory):
             return await self.http.postCommand(pendingCommand)
 
         regdCommand = regdGlobally.pop(pendingCommand.name)
-        if pendingCommand == Record.fromDiscord(regdCommand):
+        if pendingCommand.eq(regdCommand):
             self.printCommand(f"matched  `{pendingCommand.name}`")
             return
 
@@ -197,14 +192,14 @@ class Pory2(Pory):
 
     async def _chatInput(self, ixn: Ixn, data: api.InteractionData):
         if not data.name: raise AttributeError()
-        commands = Record.get(self)
+        commands = Command.get(self)
         params = {}
         if data.options:
             for option in data.options:
                 params[option.name] = self._getParamsForTR(commands[data.name], option, data.resolved)
         await commands[data.name].call(self, ixn, **params)
 
-    def _getParamsForTR(self, command: Record, option: api.InteractionCommandDataOption, resolved: api.InteractionCommandDataResolved | None):
+    def _getParamsForTR(self, command: Command, option: api.InteractionCommandDataOption, resolved: api.InteractionCommandDataResolved | None):
         hint = command.getOption(option.name)
         if not hint: raise ValueError(f"Function for Learn {command.reference()} got unexpected option {option.name}")
         param = option.value
@@ -235,4 +230,7 @@ class Pory2(Pory):
                 param = _cast(resolved.channels if resolved else None)
             case enums.CommandOptionTypes.Mentionable:
                 param = api.Snowflake(param)
+            case enums.CommandOptionTypes.SubCommand | enums.CommandOptionTypes.SubCommandGroup:
+                param = command.getOption(option.name)
+                if not isinstance(param, Machine): raise ValueError()
         return param

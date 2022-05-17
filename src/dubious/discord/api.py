@@ -5,7 +5,7 @@ import datetime as dt
 from typing import Any, Tuple
 
 from dubious.discord.enums import InteractionEventTypes, opcode, tcode
-from pydantic import BaseModel, Extra, Field, ValidationError
+from pydantic import BaseModel, Extra, Field, ValidationError, validator
 
 
 class Snowflake(str):
@@ -53,16 +53,72 @@ class DiscError(ValueError):
         self.errors = errors
         super().__init__(f"in {cls}, with the following data:\n{data}:\n{errors}")
 
+class ErrorCodeMessage():
+    code: str | None
+    message: str | None
+
+    def __init__(self, code: str | None, message: str | None):
+        self.code = code
+        self.message = message
+
+class RequestError():
+    errors: list[ErrorCodeMessage]
+
+    def __init__(self, errors: list):
+        self.errors = []
+        for error in errors:
+            self.errors.append(ErrorCodeMessage(**error))
+
+class ObjectError():
+    errors: dict[str, RequestError | ArrayError]
+
+    def __init__(self, errors: dict[str, dict]):
+        self.errors = {}
+        for key, val in errors.items():
+            if "_errors" in val:
+                self.errors[key] = RequestError(val["_errors"])
+            elif "0" in val:
+                self.errors[key] = ArrayError(list(val.values()))
+            else:
+                raise ValueError("Wrong type for ObjectError")
+
+class ArrayError():
+
+    items: list[ObjectError] = []
+
+    def __init__(self, errors: list[dict]):
+        self.items = []
+        for error in errors:
+            self.items.append(ObjectError(error))
+
+class Error(ErrorCodeMessage):
+    errors: RequestError | ObjectError | ArrayError | None
+    # only present in HTTP code 429 (Rate Limit)
+    retry_after: float | None
+
+    def __init__(self, code: str | None, message: str | None, errors: dict | None, retry_after: float | None=None):
+        super().__init__(code, message)
+        self.retry_after = retry_after
+        print(errors)
+
+        if not errors:
+            self.errors = None
+        elif "0" in errors:
+            self.errors = ArrayError(list(errors.values()))
+        elif "_errors" in errors:
+            self.errors = RequestError(errors["_errors"])
+        else:
+            self.errors = ObjectError(errors)
+
 class Disc(BaseModel):
     def __init__(self, **data: Any) -> None:
-        try:
+        # try:
             super().__init__(**data)
-        except ValidationError as e:
-            raise DiscError(self.__class__, data, e.json())
+        # except ValidationError as e:
+            # raise DiscError(self.__class__, data, e.json())
         #print(f"{self.__class__.__name__}:\n{data}\nactual:\n{self.debug()}\n")
 
     class Config:
-        underscore_attrs_are_private = False
         allow_population_by_field_name = True
 
     def debug(self, tab=0, *, leadingNewline=True, ignoreNested=False):
@@ -118,38 +174,6 @@ class Payload(Disc):
         #  otherwise it defaults to casting the object to a dict.
         if isinstance(data["d"], Disc):
             self.d = data["d"]
-
-class ErrorCodeMessage(Disc):
-    code: str | None
-    message: str | None
-class RequestError(Disc):
-    errors: list[ErrorCodeMessage] = Field(alias="_errors")
-
-class ObjectError(Disc):
-    class Config:
-        extra = Extra.allow
-
-    def __init__(self, **data: Any) -> None:
-        super().__init__(**data)
-        for key, val in self:
-            setattr(self, key, RequestError.parse_obj(val))
-
-class ArrayError(Disc):
-    class Config:
-        extra = Extra.allow
-
-    items: list[ObjectError]
-
-    def __init__(self, **data: Any):
-        super().__init__(**data)
-        self.items = []
-        for value in data.values():
-            self.items.append(ObjectError.parse_obj(value))
-
-class Error(ErrorCodeMessage):
-    errors: RequestError | ObjectError | ArrayError | None
-    # only present in HTTP code 429 (Rate Limit)
-    retry_after: float | None
 
 # https://discord.com/developers/docs/topics/gateway#activity-object-activity-structure
 class Activity(Disc):
@@ -1050,8 +1074,8 @@ class WelcomeScreenChannel(Disc):
     emoji_id:    Snowflake | None = ... #type: ignore
     emoji_name:  Snowflake | None = ... #type: ignore
 
-def _fuckyoupydantic(cls: type[BaseModel]):
+def fuckyoupydantic(cls: type[BaseModel]):
     for subcls in cls.__subclasses__():
-        _fuckyoupydantic(subcls)
+        fuckyoupydantic(subcls)
     cls.update_forward_refs()
-_fuckyoupydantic(Disc)
+fuckyoupydantic(Disc)

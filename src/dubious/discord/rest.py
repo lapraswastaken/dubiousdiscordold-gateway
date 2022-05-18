@@ -58,8 +58,8 @@ class HTTPError(Exception):
         self.message = error.message
         self.errors = error.errors
         self.payload = payload
-        super().__init__(f"in {payload.__class__.__name__}:\n{self.payload.debug(ignoreNested=True) if self.payload else None}\n\nin {url}:\n  {self.code}: {self.message}\n{self.formatErrors(self.errors, tab=2)}")
-    
+        super().__init__(f"in {payload.__class__.__name__}:\n{self.payload.debug(ignoreNested=False) if self.payload else None}\n\nin {url}:\n  {self.code}: {self.message}\n{self.formatErrors(self.errors, tab=2)}")
+
     def formatErrors(self, errors: api.RequestError | api.ObjectError | api.ArrayError | None, tab=0):
         print(type(errors))
         print(errors)
@@ -273,12 +273,12 @@ class Http:
         return await self.request(
             hdrs.METH_POST, api.Message, Expects.multiple,
             self.url.messages(channelID, "bulk-delete"), messages=messageIDs)
-    
+
     async def postInteractionResponse(self, interactionID: api.Snowflake, token: str, response: make.Response):
         return await self.request(
             hdrs.METH_POST, api.Message, Expects.none,
             self.url.interactions(interactionID, token), response)
-    async def postInteractionFollowup(self, token: str, followup: make.Response):
+    async def postInteractionFollowup(self, token: str, followup: make.CallbackData):
         return await self.request(
             hdrs.METH_POST, api.Message, Expects.single,
             self.url.webhookMessages(self.id, token, None), followup)

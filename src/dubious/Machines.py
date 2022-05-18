@@ -119,7 +119,13 @@ class Command(Machine, make.Command):
 class Option(Machine, make.CommandOption):
 
     @classmethod
-    def make(cls, name: str, description: str, type: enums.CommandOptionTypes, required: bool | None=True, choices: list[make.CommandOptionChoice] | None=None):
+    def make(cls,
+        name: str,
+        description: str,
+        type: enums.CommandOptionTypes,
+        required: bool | None=True,
+        choices: list[make.CommandOptionChoice] | None=None
+    ):
         return super().make(
             name=name,
             description=description,

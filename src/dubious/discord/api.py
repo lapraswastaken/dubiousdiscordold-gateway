@@ -96,7 +96,7 @@ class Error(ErrorCodeMessage):
     # only present in HTTP code 429 (Rate Limit)
     retry_after: float | None
 
-    def __init__(self, code: str | None, message: str | None, errors: dict | None, retry_after: float | None=None):
+    def __init__(self, code: str | None, message: str | None, errors: dict | None=None, retry_after: float | None=None):
         super().__init__(code, message)
         self.retry_after = retry_after
         print(errors)

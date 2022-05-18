@@ -23,7 +23,7 @@ class Ixn:
 
     def _castData(self, response: t_Response):
         if isinstance(response, str):
-            return  make.RMessage(content=response)
+            return make.RMessage(content=response)
         elif isinstance(response, make.Response):
             return response.data
         return response
@@ -41,7 +41,7 @@ class Ixn:
             [make.Response],
                 Coroutine[Any, Any, api.Message | None]],
         silent: bool,
-        private: bool
+        private: bool,
     ):
         if not silent:
             response = self._castResponse(response)
@@ -69,6 +69,6 @@ class Ixn:
     async def followup(self, response: t_Response, *, silent=False, private=False):
         return await self._makeMessage(
             response,
-            lambda res: self._http.postInteractionFollowup(self._ixn.token, res),
+            lambda res: self._http.postInteractionFollowup(self._ixn.token, res.data),
             silent, private
         )

@@ -6,4 +6,4 @@ src/dubiousdiscord*
 **/sources*
 .mypy_cache
 
-_Pory.py
+main.py

@@ -58,8 +58,8 @@ class HTTPError(Exception):
         self.message = error.message
         self.errors = error.errors
         self.payload = payload
-        super().__init__(f"in {payload.__class__.__name__}:\n {self.payload}\nin {url}:\n  {self.code}: {self.message}\n{self.formatErrors(self.errors, tab=2)}")
-    
+        super().__init__(f"in {payload.__class__.__name__}:\n{self.payload.debug(ignoreNested=False) if self.payload else None}\n\nin {url}:\n  {self.code}: {self.message}\n{self.formatErrors(self.errors, tab=2)}")
+
     def formatErrors(self, errors: api.RequestError | api.ObjectError | api.ArrayError | None, tab=0):
         print(type(errors))
         print(errors)
@@ -68,7 +68,10 @@ class HTTPError(Exception):
             return f"{tabulation}No message"
         elif isinstance(errors, api.RequestError):
             return "\n".join([f"{tabulation}{error.code}: {error.message}" for error in errors.errors])
-        return "\n".join([f"{tabulation}{fieldName}:\n{self.formatErrors(value, tab+1)}" for fieldName, value in errors])
+        elif isinstance(errors, api.ObjectError):
+            return "\n".join([f"{tabulation}{fieldName}:\n{self.formatErrors(value, tab+1)}" for fieldName, value in errors.errors.items()])
+        else:
+            return "\n".join([f"{tabulation}{num}:\n{self.formatErrors(value, tab+1)}" for num, value in enumerate(errors.items)])
 
 class ResponseError(Exception):
     def __init__(self, method: str, url: str, expected: type):
@@ -149,36 +152,36 @@ class Http:
         self.auth = {
             "Authorization": f"Bot {self.token}"
         }
-    
+
     def _addCache(self, typ: type[api.IDable]):
         self.caches[typ] = Cache(cast=typ)
-    
+
     async def close(self):
         await self.session.close()
 
     async def handleRes(self, res: aiohttp.ClientResponse):
         if not res.status in range(200, 300):
-            error = api.Error.parse_obj(await res.json())
+            error = api.Error(**await res.json())
             if error.retry_after is not None:
                 await asyncio.sleep(error.retry_after)
                 return False # rate limited
-            
+
             return error
-        
+
         if not await res.text():
             return None
-        
+
         got = await res.json()
         return got
 
     @overload
-    async def request(self, method: str, typ: type[t_IDable], expects: Literal[Expects.none], url: str, payload: api.Disc | None=None, **params: Any) -> None: ...
+    async def request(self, method: str, typ: type[t_IDable], expects: Literal[Expects.none], url: str, payload: make.Make | None=None, **params: Any) -> None: ...
     @overload
-    async def request(self, method: str, typ: type[t_IDable], expects: Literal[Expects.single], url: str, payload: api.Disc | None=None, **params: Any) -> t_IDable: ...
+    async def request(self, method: str, typ: type[t_IDable], expects: Literal[Expects.single], url: str, payload: make.Make | None=None, **params: Any) -> t_IDable: ...
     @overload
-    async def request(self, method: str, typ: type[t_IDable], expects: Literal[Expects.multiple], url: str, payload: api.Disc | None=None, **params: Any) -> List[t_IDable]: ...
+    async def request(self, method: str, typ: type[t_IDable], expects: Literal[Expects.multiple], url: str, payload: make.Make | None=None, **params: Any) -> List[t_IDable]: ...
     
-    async def request(self, method: str, typ: type[t_IDable], expects: t_Expects, url: str, payload: api.Disc | None=None, **params: Any) -> None | t_IDable | List[t_IDable]:
+    async def request(self, method: str, typ: type[t_IDable], expects: t_Expects, url: str, payload: make.Make | None=None, **params: Any) -> None | t_IDable | List[t_IDable]:
         headers: Dict[str, Dict[str, Any] | str] = {"headers": self.auth}
         if payload: headers["json"] = payload.dict()
         if params: headers["params"] = params
@@ -190,7 +193,7 @@ class Http:
                 return await self.request(method, typ, expects, url, payload, **params)
             if isinstance(ret, api.Error):
                 raise HTTPError(url, ret, payload)
-            
+
             if expects == Expects.none:
                 if ret is not None: raise ResponseError(method, url, type(None))
                 return ret
@@ -200,9 +203,9 @@ class Http:
             if expects == Expects.multiple:
                 if not isinstance(ret, list): raise ResponseError(method, url, list[typ])
                 return [typ.parse_obj(item) for item in ret]
-            
+
             raise ResponseError(method, url, Any)
-    
+
     async def getGlobalCommands(self):
         return await self.request(
             hdrs.METH_GET, api.ApplicationCommand, Expects.multiple,
@@ -270,12 +273,12 @@ class Http:
         return await self.request(
             hdrs.METH_POST, api.Message, Expects.multiple,
             self.url.messages(channelID, "bulk-delete"), messages=messageIDs)
-    
+
     async def postInteractionResponse(self, interactionID: api.Snowflake, token: str, response: make.Response):
         return await self.request(
             hdrs.METH_POST, api.Message, Expects.none,
             self.url.interactions(interactionID, token), response)
-    async def postInteractionFollowup(self, token: str, followup: make.Response):
+    async def postInteractionFollowup(self, token: str, followup: make.CallbackData):
         return await self.request(
             hdrs.METH_POST, api.Message, Expects.single,
             self.url.webhookMessages(self.id, token, None), followup)

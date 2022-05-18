@@ -6,7 +6,7 @@ from typing_extensions import Self
 from dubious.discord import api, enums, make, rest
 from dubious.discord.core import Core, Discore
 from dubious.Interaction import Ixn
-from dubious.Machines import TR, HM
+from dubious.Machines import Command, Hidden, Machine
 
 t_Handler = Callable[
     [enums.codes, api.Payload],
@@ -70,6 +70,7 @@ class Chip(Core):
 
 class Pory:
     chip: Chip
+    up: "Pory | None"
 
     _user: api.User
     _guildIDs: set[api.Snowflake]
@@ -89,28 +90,34 @@ class Pory:
     def use(self, chip: Chip | Self):
         if isinstance(chip, Pory):
             self.chip = chip.chip
+            self.up = chip
         else:
             self.chip = chip
         self.chip.addHandler(self._handle)
         return self
 
     async def _handle(self, code: enums.codes, payload: api.Payload):
-        handler = HM.get(self).get(code)
+        handler = Hidden.get(self).get(code)
         if not handler: return
 
         d = api.cast(payload)
         await handler.call(self, d)
 
-    @HM(enums.tcode.Ready)
+    @Hidden(enums.tcode.Ready)
     async def ready(self, ready: api.Ready):
         self._user = ready.user
         self._guildIDs = {g.id for g in ready.guilds}
         self.http = rest.Http(self.user.id, self.token)
 
 class Pory2(Pory):
-    doPrintCommands: ClassVar = True
+    supercommand: ClassVar[Command | None] = None
 
-    @HM(enums.tcode.Ready)
+    doPrintCommands: ClassVar = True
+    def printCommand(self, *message):
+        if self.doPrintCommands:
+            print(*message)
+
+    @Hidden(enums.tcode.Ready)
     async def _registerCommands(self, _):
 
         t_RegdCommands = dict[str, api.ApplicationCommand]
@@ -124,19 +131,16 @@ class Pory2(Pory):
         for guildID in self.guildIDs:
             regdGuildly[guildID] = dictify(await self.http.getGuildCommands(guildID))
 
-        for pendingCommand in TR.get(self).values():
-            createCommand = pendingCommand.dump()
-            await self._processPendingCommand(createCommand, regdGlobally, regdGuildly)
+        for pendingCommand in Command.get(self).values():
+            await self._processPendingCommand(pendingCommand, regdGlobally, regdGuildly)
 
         for remainingCommand in regdGlobally.values():
-            if self.doPrintCommands:
-                print(f"deleting `{remainingCommand.name}`")
+            self.printCommand(f"deleting `{remainingCommand.name}`")
             await self.http.deleteCommand(remainingCommand.id)
 
         for guildID in regdGuildly:
             for remainingGuildCommand in regdGuildly[guildID].values():
-                if self.doPrintCommands:
-                    print(f"deleting `{remainingGuildCommand.name}` from guild {remainingGuildCommand.guild_id}")
+                self.printCommand(f"deleting `{remainingGuildCommand.name}` from guild {remainingGuildCommand.guild_id}")
                 await self.http.deleteGuildCommand(guildID, remainingGuildCommand.id)
 
     async def _processPendingCommand(self,
@@ -149,42 +153,35 @@ class Pory2(Pory):
     ):
         if pendingCommand.guildID:
             if not pendingCommand.guildID in regdGuildly:
-                if self.doPrintCommands:
-                    print(f"creating `{pendingCommand.name}` in guild {pendingCommand.guildID}")
+                self.printCommand(f"creating `{pendingCommand.name}` in guild {pendingCommand.guildID}")
                 return await self.http.postGuildCommand(pendingCommand.guildID, pendingCommand)
 
             regdCommands = regdGuildly[pendingCommand.guildID]
             if not pendingCommand.name in regdCommands:
-                if self.doPrintCommands:
-                    print(f"creating `{pendingCommand.name}` in guild {pendingCommand.guildID}")
+                self.printCommand(f"creating `{pendingCommand.name}` in guild {pendingCommand.guildID}")
                 return await self.http.postGuildCommand(pendingCommand.guildID, pendingCommand)
 
             regdCommand = regdCommands.pop(pendingCommand.name)
             if pendingCommand.eq(regdCommand):
-                if self.doPrintCommands:
-                    print(f"matched  `{pendingCommand.name}` in guild {pendingCommand.guildID}")
+                self.printCommand(f"matched  `{pendingCommand.name}` in guild {pendingCommand.guildID}")
                 return
 
-            if self.doPrintCommands:
-                print(f"patching `{pendingCommand.name}` in guild {pendingCommand.guildID}")
+            self.printCommand(f"patching `{pendingCommand.name}` in guild {pendingCommand.guildID}")
             return await self.http.patchGuildCommand(pendingCommand.guildID, regdCommand.id, pendingCommand)
 
         if not pendingCommand.name in regdGlobally:
-            if self.doPrintCommands:
-                print(f"creating `{pendingCommand.name}`")
+            self.printCommand(f"creating `{pendingCommand.name}`")
             return await self.http.postCommand(pendingCommand)
 
         regdCommand = regdGlobally.pop(pendingCommand.name)
         if pendingCommand.eq(regdCommand):
-            if self.doPrintCommands:
-                print(f"matched  `{pendingCommand.name}`")
+            self.printCommand(f"matched  `{pendingCommand.name}`")
             return
 
-        if self.doPrintCommands:
-            print(f"patching `{pendingCommand.name}`")
+        self.printCommand(f"patching `{pendingCommand.name}`")
         return await self.http.patchCommand(regdCommand.id, pendingCommand)
 
-    @HM(api.tcode.InteractionCreate)
+    @Hidden(api.tcode.InteractionCreate)
     async def _interaction(self, interaction: api.Interaction):
         if interaction.data:
             ixn = Ixn(interaction, self.http)
@@ -195,14 +192,14 @@ class Pory2(Pory):
 
     async def _chatInput(self, ixn: Ixn, data: api.InteractionData):
         if not data.name: raise AttributeError()
-        commands = TR.get(self)
+        commands = Command.get(self)
         params = {}
         if data.options:
             for option in data.options:
                 params[option.name] = self._getParamsForTR(commands[data.name], option, data.resolved)
         await commands[data.name].call(self, ixn, **params)
 
-    def _getParamsForTR(self, command: TR, option: api.InteractionCommandDataOption, resolved: api.InteractionCommandDataResolved | None):
+    def _getParamsForTR(self, command: Command, option: api.InteractionCommandDataOption, resolved: api.InteractionCommandDataResolved | None):
         hint = command.getOption(option.name)
         if not hint: raise ValueError(f"Function for Learn {command.reference()} got unexpected option {option.name}")
         param = option.value
@@ -233,4 +230,7 @@ class Pory2(Pory):
                 param = _cast(resolved.channels if resolved else None)
             case enums.CommandOptionTypes.Mentionable:
                 param = api.Snowflake(param)
+            case enums.CommandOptionTypes.SubCommand | enums.CommandOptionTypes.SubCommandGroup:
+                param = command.getOption(option.name)
+                if not isinstance(param, Machine): raise ValueError()
         return param

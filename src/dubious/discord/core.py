@@ -50,7 +50,7 @@ class Core:
         """ Runs cleanup for the loops (when stopping / an error occurs). """
 
     def start(self):
-        """ Start all loops in `self.getcoros()`. """
+        """ Starts all loops in `self.getcoros()`. """
 
         self.set()
         loop = asyncio.get_event_loop()
@@ -182,8 +182,8 @@ class Discore(Core):
             await self._ws.send(payload.json())
 
     async def _task_beat(self):
-        """ Loop for periodically adding a heartbeat payload to the send
-            queue. """
+        """ Loop for periodically adding an `opcode.Heartbeat` payload to the
+            send queue. """
 
         await self.connected.wait()
 
@@ -198,17 +198,17 @@ class Discore(Core):
             await self.send(self._heartbeat())
 
     def _heartbeat(self):
-        """ Creates a heartbeat payload based on the last sequence number sent
-            by Discord. """
+        """ Creates an `opcode.Heartbeat` payload based on the last sequence
+            number sent by Discord. """
 
         return self.makePayload(
             enums.opcode.Heartbeat
         )
 
     def _identify(self):
-        """ Creates an Identify payload to send to Discord upon recieving the
-            Hello payload. Contains the bot user token and the desired intents
-            for the bot user. """
+        """ Creates an `opcode.Identify` payload to send to Discord upon
+            recieving the `opcode.Hello` payload. Contains the bot user token
+            and the desired intents for the bot user. """
 
         return self.makePayload(
             enums.opcode.Identify,
@@ -224,7 +224,8 @@ class Discore(Core):
         )
 
     def makePayload(self, code: enums.codes, d: api.t_APIData=None):
-        """ Creates a payload that includes the last sequence number sent by Discord. """
+        """ Creates a `Payload` that includes the last sequence number sent by
+            Discord. """
 
         return api.Payload(
             op=code if isinstance(code, enums.opcode)

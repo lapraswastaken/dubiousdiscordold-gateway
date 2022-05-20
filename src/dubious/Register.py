@@ -31,7 +31,7 @@ class Register(abc.ABC, Generic[t_Reference]):
         return f
 
     @classmethod
-    def get(cls, owner: Any):
+    def get(cls, owner: object) -> dict[t_Reference, Self]:
         """ Gets all instances of this Register for the given owner's
             class. A default can be specified if none are found (i.e.
             the owning class has no collection in __all__). """

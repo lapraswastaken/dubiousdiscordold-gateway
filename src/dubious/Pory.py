@@ -140,7 +140,12 @@ class Pory2(Pory):
         `http` api.
         Also pre-defined is a method called when the `Chip` catches a
         `tcode.InteractionCreate` payload. This method calls the coresponding
-        `Command` method on this `Pory2`. """
+        `Command` method on this `Pory2`.
+
+        For convenience, the `.TEST_IN` ClassVar will make all `Command`s in
+        this Pory2 register in the guild with the specified ID. """
+
+    TEST_IN: ClassVar[api.Snowflake | str | int | None] = None
 
     supercommand: ClassVar[Command | None] = None
 
@@ -164,6 +169,7 @@ class Pory2(Pory):
             regdGuildly[guildID] = dictify(await self.http.getGuildCommands(guildID))
 
         for pendingCommand in Command.get(self).values():
+            if self.TEST_IN: pendingCommand.guildID = api.Snowflake(self.TEST_IN)
             await self._processPendingCommand(pendingCommand, regdGlobally, regdGuildly)
 
         for remainingCommand in regdGlobally.values():

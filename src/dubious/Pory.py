@@ -6,7 +6,7 @@ from typing_extensions import Self
 from dubious.discord import api, enums, make, rest
 from dubious.discord.core import Core, Discore
 from dubious.Interaction import Ixn
-from dubious.Machines import Command, Handle, Machine
+from dubious.Machines import Command, Handle, Machine, Option
 
 t_Handler = Callable[
     [enums.codes, api.Payload],
@@ -109,7 +109,6 @@ class Pory:
 
         if isinstance(chip, Pory):
             self.chip = chip.chip
-            self.up = chip
         else:
             self.chip = chip
         self.chip.addHandler(self._handle)
@@ -153,6 +152,14 @@ class Pory2(Pory):
     def printCommand(self, *message):
         if self.doPrintCommands:
             print(*message)
+
+    def use(self, chip: Chip | Self):
+        if not isinstance(chip, Chip):
+            supercommand = (
+                chip.supercommand if chip.supercommand else
+                Command.make(chip.__class__.__name__, "No descrpition provided.")
+            )
+        return super().use(chip)
 
     @Handle(enums.tcode.Ready)
     async def _registerCommands(self, _):

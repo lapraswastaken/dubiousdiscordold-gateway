@@ -6,7 +6,7 @@ from typing_extensions import Self
 from dubious.discord import api, enums, make, rest
 from dubious.discord.core import Core, Discore
 from dubious.Interaction import Ixn
-from dubious.Machines import Command, Handle, Machine
+from dubious.Machines import Command, Handle, Machine, Option
 
 t_Handler = Callable[
     [enums.codes, api.Payload],
@@ -109,7 +109,6 @@ class Pory:
 
         if isinstance(chip, Pory):
             self.chip = chip.chip
-            self.up = chip
         else:
             self.chip = chip
         self.chip.addHandler(self._handle)
@@ -140,7 +139,12 @@ class Pory2(Pory):
         `http` api.
         Also pre-defined is a method called when the `Chip` catches a
         `tcode.InteractionCreate` payload. This method calls the coresponding
-        `Command` method on this `Pory2`. """
+        `Command` method on this `Pory2`.
+
+        For convenience, the `.TEST_IN` ClassVar will make all `Command`s in
+        this Pory2 register in the guild with the specified ID. """
+
+    TEST_IN: ClassVar[api.Snowflake | str | int | None] = None
 
     supercommand: ClassVar[Command | None] = None
 
@@ -148,6 +152,14 @@ class Pory2(Pory):
     def printCommand(self, *message):
         if self.doPrintCommands:
             print(*message)
+
+    def use(self, chip: Chip | Self):
+        if not isinstance(chip, Chip):
+            supercommand = (
+                chip.supercommand if chip.supercommand else
+                Command.make(chip.__class__.__name__, "No descrpition provided.")
+            )
+        return super().use(chip)
 
     @Handle(enums.tcode.Ready)
     async def _registerCommands(self, _):
@@ -164,6 +176,7 @@ class Pory2(Pory):
             regdGuildly[guildID] = dictify(await self.http.getGuildCommands(guildID))
 
         for pendingCommand in Command.get(self).values():
+            if self.TEST_IN: pendingCommand.guildID = api.Snowflake(self.TEST_IN)
             await self._processPendingCommand(pendingCommand, regdGlobally, regdGuildly)
 
         for remainingCommand in regdGlobally.values():

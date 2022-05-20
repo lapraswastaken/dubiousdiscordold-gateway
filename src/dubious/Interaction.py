@@ -4,6 +4,10 @@ from dubious.discord import api, enums, make, rest
 
 
 class Ixn:
+    """ Holds methods and relevant information about an `api.Interaction` object
+        recieved from Discord. """
+
+
     _ixn: api.Interaction
     _http: rest.Http
 
@@ -56,10 +60,15 @@ class Ixn:
                 await self.edit(response, msg.id)
 
     async def edit(self, response: t_Response, id: api.Snowflake | rest.t_Original=enums.IxnOriginal):
+        """ Edits a pre-existing response to the bound `api.Interaction`. """
+
         response = self._castData(response)
         return await self._http.patchInteractionMessage(self._ixn.token, id, response)
 
     async def respond(self, response: t_Response, *, silent=False, private=False):
+        """ Creates an initial response to the bound `api.Interaction`. Can only
+            be called once per instance. """
+
         return await self._makeMessage(
             response,
             lambda res: self._http.postInteractionResponse(self._ixn.id, self._ixn.token, res),
@@ -67,6 +76,10 @@ class Ixn:
         )
 
     async def followup(self, response: t_Response, *, silent=False, private=False):
+        """ Creates a follow-up response to the bound `api.Interaction`. This
+            can only be called once `.respond` has been called for the bound
+            `api.Interaction`. """
+
         return await self._makeMessage(
             response,
             lambda res: self._http.postInteractionFollowup(self._ixn.token, res.data),

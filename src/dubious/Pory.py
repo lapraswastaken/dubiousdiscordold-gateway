@@ -6,13 +6,20 @@ from typing_extensions import Self
 from dubious.discord import api, enums, make, rest
 from dubious.discord.core import Core, Discore
 from dubious.Interaction import Ixn
-from dubious.Machines import Command, Hidden, Machine
+from dubious.Machines import Command, Handle, Machine
 
 t_Handler = Callable[
     [enums.codes, api.Payload],
         Coroutine[Any, Any, None]]
 
 class Chip(Core):
+    """ Handles the connection to Discord and other core functionalities.
+
+        Uses a Discore to connect to Discord, and has the same protocols for
+        running loops in (mock) parallel. Handler functions can be added to a
+        Chip that get called whenever a payload is recieved from Discord through
+        the Discore. """
+
     _core: Discore
     _handlers: list[t_Handler]
 
@@ -66,9 +73,18 @@ class Chip(Core):
         super().start()
 
     def addHandler(self, func: t_Handler):
+        """ Adds a function to be called whenever a Payload is recieved. """
+
         self._handlers.append(func)
 
 class Pory:
+    """ A collection of `Handle`-wrapped methods that uses a Chip to handle
+        raw payloads from Discord. 
+
+        Pre-defined is a method called when the `Chip` catches a `tcode.Ready`
+        payload. This method sets the `Pory`'s `user`, its `guildIDs`, and its
+        `http` api connection. """
+
     chip: Chip
     up: "Pory | None"
 
@@ -88,6 +104,9 @@ class Pory:
     def token(self): return self.chip.core.token
 
     def use(self, chip: Chip | Self):
+        """ Tells the `Pory` to use a specific Chip. If another `Pory` is given
+            instead, uses that `Pory`'s `Chip`. """
+
         if isinstance(chip, Pory):
             self.chip = chip.chip
             self.up = chip
@@ -97,19 +116,32 @@ class Pory:
         return self
 
     async def _handle(self, code: enums.codes, payload: api.Payload):
-        handler = Hidden.get(self).get(code)
+        handler = Handle.get(self).get(code)
         if not handler: return
 
         d = api.cast(payload)
         await handler.call(self, d)
 
-    @Hidden(enums.tcode.Ready)
+    @Handle(enums.tcode.Ready)
     async def ready(self, ready: api.Ready):
+        """ Sets the `Pory`'s `user`, its `guildIDs`, and instantiates an `http`
+            api framework. """
+
         self._user = ready.user
         self._guildIDs = {g.id for g in ready.guilds}
         self.http = rest.Http(self.user.id, self.token)
 
 class Pory2(Pory):
+    """ A collection of `Command`-wrapped methods that registers each method as
+        a Discord Application Command. Also collects `Handle`s.
+
+        Pre-defined is a method called when the `Chip` catches a `tcode.Ready`
+        payload. This method automatically registers all `Command`s via the
+        `http` api.
+        Also pre-defined is a method called when the `Chip` catches a
+        `tcode.InteractionCreate` payload. This method calls the coresponding
+        `Command` method on this `Pory2`. """
+
     supercommand: ClassVar[Command | None] = None
 
     doPrintCommands: ClassVar = True
@@ -117,7 +149,7 @@ class Pory2(Pory):
         if self.doPrintCommands:
             print(*message)
 
-    @Hidden(enums.tcode.Ready)
+    @Handle(enums.tcode.Ready)
     async def _registerCommands(self, _):
 
         t_RegdCommands = dict[str, api.ApplicationCommand]
@@ -181,7 +213,7 @@ class Pory2(Pory):
         self.printCommand(f"patching `{pendingCommand.name}`")
         return await self.http.patchCommand(regdCommand.id, pendingCommand)
 
-    @Hidden(api.tcode.InteractionCreate)
+    @Handle(api.tcode.InteractionCreate)
     async def _interaction(self, interaction: api.Interaction):
         if interaction.data:
             ixn = Ixn(interaction, self.http)

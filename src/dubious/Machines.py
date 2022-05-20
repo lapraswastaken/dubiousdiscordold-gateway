@@ -1,22 +1,24 @@
 
-
 import abc
 import inspect
-from typing import Any, Callable, Concatenate, Coroutine, Generic, TypeVar
+from typing import Any, Callable, Concatenate, Coroutine, TypeVar
 from typing_extensions import Self
 
-from pydantic import Field, PrivateAttr
+from pydantic import PrivateAttr
 from dubious.Interaction import Ixn
 
 from dubious.Register import OrderedRegister, Register, t_Params
-from dubious.discord import api, enums, make, rest
+from dubious.discord import api, enums, make
 
 a_Data = api.Disc | bool | dict | None
 t_BoundData = TypeVar("t_BoundData", bound=a_Data)
 a_HandleCallback = Callable[[t_BoundData], Coroutine[Any, Any, None]]
 a_HandleReference = enums.opcode | enums.tcode
 
-class Hidden(OrderedRegister[a_HandleReference]):
+class Handle(OrderedRegister[a_HandleReference]):
+    """ Decorates functions meant to be called when Discord sends a dispatch
+        payload (a payload with opcode 0 and an existent tcode). """
+
     func: a_HandleCallback[a_Data]
     # The code that the handler will be attached to.
     code: a_HandleReference
@@ -37,6 +39,9 @@ t_TMCallback = Callable[
         Coroutine[Any, Any, Any]
 ]
 class Machine(Register[a_RecordReference], make.CommandPart, abc.ABC):
+    """ An abstract class meant to decorate functions that will be called when
+        Discord sends a dispatch payload with an Interaction object. """
+
     _func: t_TMCallback = PrivateAttr()
 
     def reference(self) -> a_RecordReference:
@@ -57,7 +62,7 @@ class Machine(Register[a_RecordReference], make.CommandPart, abc.ABC):
                 raise AttributeError(f"Parameter {paramName} was found in this command's function's signature, but it wasn't found in this command's options.")
         return super().__call__(func)
 
-    async def call(self, owner: Any, ixn: Ixn, **kwargs):
+    async def call(self, owner: Any, ixn: Ixn, **kwargs: Any):
         subcommands: list[Machine] = []
         toRemove: list[str] = []
         for kwargname, kwarg in kwargs.items():
@@ -78,6 +83,8 @@ class Machine(Register[a_RecordReference], make.CommandPart, abc.ABC):
         type: enums.ApplicationCommandTypes | enums.CommandOptionTypes,
         options: list[make.CommandPart] | None=None,
     **kwargs) -> Self:
+        """ Constructs this Machine without the need for kwargs. """
+
         return cls(
             name=name,
             description=description,
@@ -86,8 +93,20 @@ class Machine(Register[a_RecordReference], make.CommandPart, abc.ABC):
             **kwargs
         )
 
+    def getOptionsByName(self):
+        """ Returns a mapped dict of the name of each option in this Machine to
+            its respective option. """
+
+        return {option.name: option for option in self.options}
+
+    def getOption(self, name: str):
+        """ Returns the option in this Machine with the specified name. """
+
+        return self.getOptionsByName().get(name)
+
 class Command(Machine, make.Command):
-    """ A class that decorates chat input commands. """
+    """ Decorates functions meant to be called when Discord sends a payload
+        describing a ChatInput Interaction. """
 
     @classmethod
     def make(cls,
@@ -104,19 +123,23 @@ class Command(Machine, make.Command):
             guildID=api.Snowflake(guildID) if guildID else None,
         )
 
-    def getOptionsByName(self):
-        return {option.name: option for option in self.options}
-
-    def getOption(self, name: str):
-        return self.getOptionsByName().get(name)
-
     def subcommand(self, command: "Command"):
-        option = Option.make(command.name, command.description, enums.CommandOptionTypes.SubCommand, None)
+        """ Returns an Option Machine to wrap a subsequent Command.
+            That Command will be called after this one when its subcommand
+            option is selected. """
+
+        option = Option.make(
+            command.name,
+            command.description,
+            enums.CommandOptionTypes.SubCommand,
+            None
+        )
         option.__call__(command._func)
         self.options.append(option)
         return option
 
 class Option(Machine, make.CommandOption):
+    """ A class that holds information about a Command's arguments. """
 
     @classmethod
     def make(cls,
@@ -136,6 +159,8 @@ class Option(Machine, make.CommandOption):
         )
 
 def Choice(name: str, value: Any):
+    """ Constructs a CommandOptionChoice without the need for kwargs. """
+
     return make.CommandOptionChoice(
         name=name,
         value=value

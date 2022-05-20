@@ -5,7 +5,7 @@ import datetime as dt
 from typing import Any, Tuple
 
 from dubious.discord.enums import InteractionEventTypes, opcode, tcode
-from pydantic import BaseModel, Extra, Field, ValidationError, validator
+from pydantic import BaseModel, Field
 
 
 class Snowflake(str):
@@ -96,10 +96,9 @@ class Error(ErrorCodeMessage):
     # only present in HTTP code 429 (Rate Limit)
     retry_after: float | None
 
-    def __init__(self, code: str | None, message: str | None, errors: dict | None=None, retry_after: float | None=None):
+    def __init__(self, code: str | None, message: str | None, errors: dict | None=None, retry_after: float | None=None, **kwargs):
         super().__init__(code, message)
         self.retry_after = retry_after
-        print(errors)
 
         if not errors:
             self.errors = None

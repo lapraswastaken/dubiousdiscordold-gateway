@@ -13,8 +13,9 @@ a_Callback = Callable[..., Coroutine[Any, Any, None]]
 t_Reference = TypeVar("t_Reference", bound=Hashable)
 
 class Register(abc.ABC, Generic[t_Reference]):
-    """ A decorator class for functions that need to be referenced by
-        classes by values other than the assigned method name. """
+    """ Decorates functions that need to be referenced by classes through values
+        other than their assigned method names. """
+
     _func: a_Callback
 
     __all__: dict[type, dict[t_Reference, Self]]
@@ -34,11 +35,13 @@ class Register(abc.ABC, Generic[t_Reference]):
         """ Gets all instances of this Register for the given owner's
             class. A default can be specified if none are found (i.e.
             the owning class has no collection in __all__). """
+
         return cls._get(owner.__class__)
 
     def __set_name__(self, owner: type, name: str):
         """ Adds this Register to a class's collection, initializing
             a new one in __all__ if none exists for the owning class. """
+
         self._set(owner)
 
     def _set(self, owner: type):
@@ -60,6 +63,9 @@ class Register(abc.ABC, Generic[t_Reference]):
         await self._func(owner, *args, **kwargs)
 
 class OrderedRegister(Register[t_Reference]):
+    """ Decorates functions that have not-unique `.reference`s and need to be
+        called in a specific order. """
+
     order: int
     next: "OrderedRegister[t_Reference] | None" = None
 
@@ -71,10 +77,10 @@ class OrderedRegister(Register[t_Reference]):
         if not root:
             super().__set_name__(owner, name)
         else:
-            r = root.add(self)
+            r = root._add(self)
             r._set(owner)
 
-    def add(self, newreg: "OrderedRegister[t_Reference]"):
+    def _add(self, newreg: "OrderedRegister[t_Reference]"):
         if newreg.order < self.order:
             newreg.next = self
             return newreg
@@ -82,7 +88,7 @@ class OrderedRegister(Register[t_Reference]):
             if self.next is None:
                 self.next = newreg
             else:
-                self.next.add(newreg)
+                self.next._add(newreg)
             return self
 
     async def call(self, owner: Any, *args, **kwargs):

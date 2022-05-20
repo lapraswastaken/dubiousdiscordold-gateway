@@ -246,7 +246,7 @@ class Http:
         return await self.request(
             hdrs.METH_DELETE, api.ApplicationCommand, Expects.none,
             self.url.commands(guildID, commandID))
-    
+
     async def getMessage(self, channelID: api.Snowflake, messageID: api.Snowflake):
         return await self.request(
             hdrs.METH_GET, api.Message, Expects.single,
@@ -294,8 +294,13 @@ class Http:
         return await self.request(
             hdrs.METH_DELETE, api.Message, Expects.none,
             self.url.webhookMessages(self.id, token, messageID))
-    
+
     async def getGuild(self, id: api.Snowflake):
         return await self.request(
             hdrs.METH_GET, api.Guild, Expects.single,
             self.url.guilds(id) )
+
+    async def getChannel(self, id: api.Snowflake):
+        return await self.request(
+            hdrs.METH_GET, api.Channel, Expects.single,
+            self.url.channels(id) )

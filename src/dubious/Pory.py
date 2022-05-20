@@ -2,6 +2,7 @@
 import asyncio
 from typing import Any, Callable, ClassVar, Coroutine, TypeVar
 from typing_extensions import Self
+from dubious.GuildStructure import Item, Structure
 
 from dubious.discord import api, enums, make, rest
 from dubious.discord.core import Core, Discore
@@ -279,3 +280,16 @@ class Pory2(Pory):
                 param = command.getOption(option.name)
                 if not isinstance(param, Machine): raise ValueError()
         return param
+
+class Pory_Z(Pory):
+
+    Channels: ClassVar[type[Structure]]
+    Roles: ClassVar[type[Structure]]
+
+    @Handle(enums.tcode.Ready)
+    async def configure(self, _):
+        self._channels = self.Channels(self.guildIDs)
+        self._roles = self.Roles(self.guildIDs)
+
+    def getChannel(self, guildID: api.Snowflake, which: Item):
+        return self._channels.get(guildID, {}).get(which.name)

@@ -32,6 +32,9 @@ class Structure(Mapping[api.Snowflake, dict[str, api.Snowflake | list[api.Snowfl
 
     def __iter__(self) -> Iterator[str]:
         return self.d.__iter__()
+    
+    def __len__(self) -> int:
+        return super().__len__()
 
     def __init__(self, guildIDs: set[api.Snowflake]):
 

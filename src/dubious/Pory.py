@@ -116,8 +116,12 @@ class Pory:
         return self
 
     async def _handle(self, code: enums.codes, payload: api.Payload):
+        print(f"{self.__class__.__name__} handling {code}")
+        print(Handle.get(self))
+
         handler = Handle.get(self).get(code)
         if not handler: return
+        print(f"got handler {handler._func.__name__}")
 
         d = api.cast(payload)
         await handler.call(self, d)
@@ -288,6 +292,7 @@ class Pory_Z(Pory):
 
     @Handle(enums.tcode.Ready)
     async def configure(self, _):
+        print("configuring")
         self._channels = self.Channels(self.guildIDs)
         self._roles = self.Roles(self.guildIDs)
 

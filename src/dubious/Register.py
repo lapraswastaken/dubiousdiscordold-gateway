@@ -1,11 +1,10 @@
 
 import abc
-from typing import Any, Callable, Coroutine, Generic, Hashable, ParamSpec, TypeVar
+from copy import deepcopy
+from typing import (Any, Callable, Coroutine, Generic, Hashable, ParamSpec,
+                    TypeVar)
 
 from typing_extensions import Self
-
-from dubious.discord import api, enums
-
 
 t_Owner = TypeVar("t_Owner")
 t_Params = ParamSpec("t_Params")
@@ -24,34 +23,33 @@ class Register(abc.ABC, Generic[t_Reference]):
         cls.__all__ = {}
 
     @classmethod
-    def _get(cls, owner: type):
-        f: dict[t_Reference, Self] = {}
-        for supercls in owner.__mro__:
-            f |= cls.__all__.get(supercls, {})
+    def _get(cls, owner: type) -> dict[t_Reference, Self]:
+        if not owner in cls.__all__ and len(owner.__mro__) > 1:
+            return cls._get(owner.__mro__[1])
+        f = cls.__all__.get(owner, {})
         return f
 
     @classmethod
     def get(cls, owner: object) -> dict[t_Reference, Self]:
-        """ Gets all instances of this Register for the given owner's
-            class. A default can be specified if none are found (i.e.
-            the owning class has no collection in __all__). """
-
+        """ Gets all instances of this Register for the given owner's class. A
+            default can be specified if none are found (i.e. the owning class
+            has no collection in __all__). """
         return cls._get(owner.__class__)
 
     def __set_name__(self, owner: type, name: str):
-        """ Adds this Register to a class's collection, initializing
-            a new one in __all__ if none exists for the owning class. """
 
         self._set(owner)
 
     def _set(self, owner: type):
+        """ Adds this Register to a class's collection, initializing a new one
+            in __all__ if none exists for the owning class. """
         self.__class__.__all__[owner] = self.__all__.get(owner, {})
         self.__class__.__all__[owner][self.reference()] = self
 
     @abc.abstractmethod
     def reference(self) -> t_Reference:
-        """ Returns a unique identifier that the Register will be
-            registered under. """
+        """ Returns a unique identifier that the Register will be registered
+            under. """
 
     def __call__(self, func: a_Callback):
         """ Makes instances of this class operate like decorators. """
@@ -63,7 +61,7 @@ class Register(abc.ABC, Generic[t_Reference]):
         await self._func(owner, *args, **kwargs)
 
 class OrderedRegister(Register[t_Reference]):
-    """ Decorates functions that have not-unique `.reference`s and need to be
+    """ Decorates functions that have non-unique `.reference`s and need to be
         called in a specific order. """
 
     order: int
@@ -72,13 +70,34 @@ class OrderedRegister(Register[t_Reference]):
     def __init__(self, order: int):
         self.order = order
 
+    def _getRoot(self, forCls: type[Self]):
+        d = self._get(forCls)
+        print(f"printing root for class {forCls.__name__}")
+        for tcode in d:
+            r = d[tcode]
+            indent = 2
+            while r:
+                print(" " * indent + f"{tcode}: {r._func.__name__}")
+                indent += 2
+                r = r.next
+        return d.get(self.reference())
+
     def __set_name__(self, owner: type, name: str):
-        root = self._get(owner).get(self.reference())
+        print(f"calling _set for {self._func.__name__} ({self.reference()}) on {owner.__name__}")
+        root = None
+        for cls in owner.__mro__:
+            root = self._getRoot(cls)
+            if root: break
         if not root:
             super().__set_name__(owner, name)
         else:
-            r = root._add(self)
+            r = deepcopy(root)._add(self)
             r._set(owner)
+
+        print("\nclass now looks like:")
+        for cls in owner.__mro__:
+            root = self._getRoot(cls)
+        print()
 
     def _add(self, newreg: "OrderedRegister[t_Reference]"):
         if newreg.order < self.order:

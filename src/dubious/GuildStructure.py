@@ -1,6 +1,6 @@
 
 import json
-from typing import ClassVar, Iterator, Mapping, _KT, _VT_co
+from typing import ClassVar, Iterator, Mapping
 from dubious.discord import api
 
 

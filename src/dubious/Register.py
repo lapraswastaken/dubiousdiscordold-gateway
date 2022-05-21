@@ -72,18 +72,9 @@ class OrderedRegister(Register[t_Reference]):
 
     def _getRoot(self, forCls: type[Self]):
         d = self._get(forCls)
-        print(f"printing root for class {forCls.__name__}")
-        for tcode in d:
-            r = d[tcode]
-            indent = 2
-            while r:
-                print(" " * indent + f"{tcode}: {r._func.__name__}")
-                indent += 2
-                r = r.next
         return d.get(self.reference())
 
     def __set_name__(self, owner: type, name: str):
-        print(f"calling _set for {self._func.__name__} ({self.reference()}) on {owner.__name__}")
         root = None
         for cls in owner.__mro__:
             root = self._getRoot(cls)
@@ -93,11 +84,6 @@ class OrderedRegister(Register[t_Reference]):
         else:
             r = deepcopy(root)._add(self)
             r._set(owner)
-
-        print("\nclass now looks like:")
-        for cls in owner.__mro__:
-            root = self._getRoot(cls)
-        print()
 
     def _add(self, newreg: "OrderedRegister[t_Reference]"):
         if newreg.order < self.order:

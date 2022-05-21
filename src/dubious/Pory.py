@@ -116,12 +116,9 @@ class Pory:
         return self
 
     async def _handle(self, code: enums.codes, payload: api.Payload):
-        print(f"{self.__class__.__name__} handling {code}")
-        print(Handle.get(self))
 
         handler = Handle.get(self).get(code)
         if not handler: return
-        print(f"got handler {handler._func.__name__}")
 
         d = api.cast(payload)
         await handler.call(self, d)

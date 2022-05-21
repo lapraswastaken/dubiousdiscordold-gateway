@@ -289,7 +289,6 @@ class Pory_Z(Pory):
 
     @Handle(enums.tcode.Ready)
     async def configure(self, _):
-        print("configuring")
         self._channels = self.Channels(self.guildIDs)
         self._roles = self.Roles(self.guildIDs)
 

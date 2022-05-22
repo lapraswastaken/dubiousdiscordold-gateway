@@ -19,6 +19,10 @@ class Structure(Mapping[api.Snowflake, dict[str, api.Snowflake | list[api.Snowfl
     _d: ClassVar[dict[str, Item]]
     d: dict[api.Snowflake, dict[str, api.Snowflake | list[api.Snowflake] | None]]
 
+    @classmethod
+    def getItems(cls):
+        return list(cls._d.values())
+
     def __init_subclass__(cls):
         cls._d = {}
         for name, itemType in cls.__annotations__.items():
@@ -80,23 +84,28 @@ class Structure(Mapping[api.Snowflake, dict[str, api.Snowflake | list[api.Snowfl
     def set(self, gid: api.Snowflake, item: One, value: api.Snowflake):
         self._check(gid, item)
         self.d[gid][item.name] = value
+        self.write()
 
     def unset(self, gid: api.Snowflake, item: One):
         self._check(gid, item)
         self.d[gid][item.name] = None
+        self.write()
 
     def add(self, gid: api.Snowflake, item: Many, value: api.Snowflake):
         orig = self._check(gid, item, True)
         if value in orig: return False
         orig.append(value)
+        self.write()
         return True
 
     def rm(self, gid: api.Snowflake, item: Many, value: api.Snowflake):
         orig = self._check(gid, item, True)
         if not value in orig: return False
         orig.remove(value)
+        self.write()
         return True
 
     def clear(self, gid: api.Snowflake, item: Many):
-        orig = self._check(gid, item, True)
+        self._check(gid, item, True)
         self.d[gid][item.name] = []
+        self.write()

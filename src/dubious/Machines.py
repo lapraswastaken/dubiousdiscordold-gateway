@@ -51,33 +51,32 @@ class Machine(Register[a_RecordReference], make.CommandPart, abc.ABC):
         # Perform a quick check to see if all extra parameters in the function
         #  signature exist in the options list.
         sig = inspect.signature(func)
-        for paramName in sig.parameters:
-            param = sig.parameters[paramName]
-            if (
-                paramName == "self" or
-                issubclass(param.annotation, Ixn) or
-                param.annotation == inspect.Parameter.empty
-            ): continue
-            if not paramName in [option.name for option in self.options]:
-                raise AttributeError(f"Parameter {paramName} was found in this command's function's signature, but it wasn't found in this command's options.")
+        for option in self.options:
+            if not option.name in sig.parameters:
+                raise AttributeError(f"Parameter `{option.name}` was found in this Command's Options list, but it wasn't found in this Command's function's signature.")
         return super().__call__(func)
 
-    async def call(self, owner: Any, ixn: Ixn, **kwargs: Any):
-        subcommands: list[Machine] = []
-        toRemove: list[str] = []
-        for kwargname, kwarg in kwargs.items():
-            if isinstance(kwarg, Machine):
-                subcommands.append(kwarg)
-                toRemove.append(kwargname)
-        for remove in toRemove:
-            kwargs.pop(remove)
-        await super().call(owner, ixn, **kwargs)
-        for subcommand in subcommands:
-            await subcommand.call(owner, ixn, **kwargs)
+    async def call(self, owner: Any, ixn: Ixn, *args: Any, **kwargs: Any):
+
+        subcommand = None
+        subcommandKwargs = {}
+        for option in self.options:
+            if isinstance(option, Machine) and option.name in kwargs:
+                subcommand = option
+                subcommandKwargs = kwargs.pop(option.name)
+                break
+
+        resultList = []
+        results = await super().call(owner, ixn, *args, **kwargs)
+        if isinstance(results, tuple): resultList += results
+        elif results: resultList.append(results)
+
+        if subcommand:
+            return await subcommand.call(owner, ixn, *resultList, **subcommandKwargs)
 
     @classmethod
     @abc.abstractmethod
-    def make(cls,
+    def new(cls,
         name: str,
         description: str,
         type: enums.ApplicationCommandTypes | enums.CommandOptionTypes,
@@ -102,20 +101,33 @@ class Machine(Register[a_RecordReference], make.CommandPart, abc.ABC):
     def getOption(self, name: str):
         """ Returns the option in this Machine with the specified name. """
 
+        for option in self.options:
+            if isinstance(option, Machine):
+                ret = option.getOption(name)
+                if ret:
+                    return ret
         return self.getOptionsByName().get(name)
+
+    def subcommand(self, command: "Subcommand"):
+        """ Returns an Option Machine to wrap a subsequent Command.
+            That Command will be called after this one when its subcommand
+            option is selected. """
+
+        self.options.append(command)
+        return command
 
 class Command(Machine, make.Command):
     """ Decorates functions meant to be called when Discord sends a payload
         describing a ChatInput Interaction. """
 
     @classmethod
-    def make(cls,
+    def new(cls,
         name: str,
         description: str,
         options: list[make.CommandPart] | None=None,
         guildID: api.Snowflake | int | str | None=None
     ):
-        return super().make(
+        return super().new(
             name=name,
             description=description,
             type=enums.ApplicationCommandTypes.ChatInput,
@@ -123,40 +135,44 @@ class Command(Machine, make.Command):
             guildID=api.Snowflake(guildID) if guildID else None,
         )
 
-    def subcommand(self, command: "Command"):
-        """ Returns an Option Machine to wrap a subsequent Command.
-            That Command will be called after this one when its subcommand
-            option is selected. """
-
-        option = Option.make(
-            command.name,
-            command.description,
-            enums.CommandOptionTypes.SubCommand,
-            None
-        )
-        option.__call__(command._func)
-        self.options.append(option)
-        return option
-
-class Option(Machine, make.CommandOption):
-    """ A class that holds information about a Command's arguments. """
+class Subcommand(Machine, make.CommandOption):
 
     @classmethod
-    def make(cls,
+    def new(cls,
         name: str,
         description: str,
-        type: enums.CommandOptionTypes,
-        required: bool | None=True,
-        choices: list[make.CommandOptionChoice] | None=None
+        options: list[make.CommandPart] | None=None,
     ):
-        return super().make(
+        return super().new(
             name=name,
             description=description,
-            type=type,
-            required=required,
-            choices=choices if choices else [],
-            options=[]
+            type=enums.CommandOptionTypes.SubCommand,
+            required=None,
+            options=options if options else [],
+            choices=[]
         )
+
+    def subcommand(self, command: "Subcommand"):
+        self.type = enums.CommandOptionTypes.SubCommandGroup
+        return super().subcommand(command)
+
+def Option(
+    name: str,
+    description: str,
+    type: enums.CommandOptionTypes,
+    required: bool | None=True,
+    choices: list[make.CommandOptionChoice] | None=None,
+    options: list[make.CommandPart] | None=None
+):
+    """ Constructs a CommandOption without the need for kwargs. """
+    return make.CommandOption(
+        name=name,
+        description=description,
+        type=type,
+        required=required,
+        choices=choices if choices else [],
+        options=options if options else [],
+    )
 
 def Choice(name: str, value: Any):
     """ Constructs a CommandOptionChoice without the need for kwargs. """

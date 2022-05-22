@@ -8,7 +8,7 @@ from typing_extensions import Self
 
 t_Owner = TypeVar("t_Owner")
 t_Params = ParamSpec("t_Params")
-a_Callback = Callable[..., Coroutine[Any, Any, None]]
+a_Callback = Callable[..., Coroutine[Any, Any, Any]]
 t_Reference = TypeVar("t_Reference", bound=Hashable)
 
 class Register(abc.ABC, Generic[t_Reference]):
@@ -24,9 +24,9 @@ class Register(abc.ABC, Generic[t_Reference]):
 
     @classmethod
     def _get(cls, owner: type) -> dict[t_Reference, Self]:
-        if not owner in cls.__all__ and len(owner.__mro__) > 1:
-            return cls._get(owner.__mro__[1])
         f = cls.__all__.get(owner, {})
+        if len(owner.__mro__[1:]):
+            f = {**cls._get(owner.__mro__[1]), **f}
         return f
 
     @classmethod
@@ -37,7 +37,6 @@ class Register(abc.ABC, Generic[t_Reference]):
         return cls._get(owner.__class__)
 
     def __set_name__(self, owner: type, name: str):
-
         self._set(owner)
 
     def _set(self, owner: type):
@@ -53,12 +52,14 @@ class Register(abc.ABC, Generic[t_Reference]):
 
     def __call__(self, func: a_Callback):
         """ Makes instances of this class operate like decorators. """
+
         self._func = func
         return self
 
     async def call(self, owner: Any, *args, **kwargs):
         """ Call the function tied to this Register. """
-        await self._func(owner, *args, **kwargs)
+
+        return await self._func(owner, *args, **kwargs)
 
 class OrderedRegister(Register[t_Reference]):
     """ Decorates functions that have non-unique `.reference`s and need to be
@@ -74,26 +75,61 @@ class OrderedRegister(Register[t_Reference]):
         d = self._get(forCls)
         return d.get(self.reference())
 
+    # def _set(self, owner: type):
+    #     print(f"setting {self.reference()} on {owner.__name__}")
+    #     super()._set(owner)
+    #     r = self
+    #     indent = 0
+    #     while r:
+    #         print(" " * indent + r._func.__name__)
+    #         indent += 2
+    #         r = r.next
+    #     print(self._get(owner))
+
     def __set_name__(self, owner: type, name: str):
+        # First we need to find the bottom-most `OrderedRegister` that has been
+        #  assigned to `owner` or its superclasses. We iterate through the
+        #  `__mro__` to do so, and the first `OrderedRegister` we find with the
+        #  same `.reference()` as `self`'s is the bottom-most.
         root = None
         for cls in owner.__mro__:
-            root = self._getRoot(cls)
+            root = deepcopy(self._getRoot(cls))
             if root: break
+        # A copy of the root is created when adding a new `OrderedRegister` -
+        #  this allows roots to be copied to subclasses without altering the
+        #  `OrderedRegister` on the superclass. Without a copy, any
+        #  `OrderedRegisters` added to the one on the superclass would be
+        #  shared across all subclasses and not just the `owner`.
         if not root:
+            # If there's no root, we call the regular `Register.__set_name__`.
             super().__set_name__(owner, name)
         else:
-            r = deepcopy(root)._add(self)
+            # If a root was found, we want to link `self` and that root.
+            #  First we add `self` to the `root.next` line,
+            r = root._add(self)
+            #  then we set the resulting root on the `owner`.
             r._set(owner)
 
-    def _add(self, newreg: "OrderedRegister[t_Reference]"):
-        if newreg.order < self.order:
-            newreg.next = self
-            return newreg
+    def _add(self, other: "OrderedRegister[t_Reference]"):
+        # In order to keep the `OrderedRegisters` ordered, when a new one is
+        #  added, it gets sorted like a linked-list would sort its values.
+        if other.order < self.order:
+            # If `self` has a higher order than `other`, it comes after `other`.
+            self.next = other.next
+            other.next = self
+            # `other` is now the new root of the chain.
+            return other
         else:
+            # If `other` has a higher order than `self`, it comes after `self`.
             if self.next is None:
-                self.next = newreg
+                # If `self` doesn't already have a `.next`, `other` becomes
+                #  `self.next`.
+                self.next = other
             else:
-                self.next._add(newreg)
+                # If `self` has a `.next`, we want to add `other` to the `.next`
+                #  of `self.next`.
+                self.next = other._add(self.next)
+            # `self` remains the root of the chain.
             return self
 
     async def call(self, owner: Any, *args, **kwargs):

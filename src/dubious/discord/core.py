@@ -158,7 +158,7 @@ class Discore(Core):
 
             match payload.op:
                 case enums.opcode.Hello:
-                    cast: api.Hello = api.cast(payload)  # type: ignore
+                    cast: api.Hello = api.castInner(payload)  # type: ignore
                     self._heartrate = cast.heartbeat_interval
                     self._beating.set()
                     self._acked.set()

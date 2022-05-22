@@ -148,7 +148,7 @@ def t(t: tcode):
 
 t_APIData = dict | bool | Disc | None
 
-def cast(p: Payload):
+def castInner(p: Payload):
     data: t_APIData
     if p.op in _Cast_op:
         data = _Cast_op[p.op].parse_obj(p.d)

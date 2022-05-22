@@ -61,8 +61,6 @@ class HTTPError(Exception):
         super().__init__(f"in {payload.__class__.__name__}:\n{self.payload.debug(ignoreNested=False) if self.payload else None}\n\nin {url}:\n  {self.code}: {self.message}\n{self.formatErrors(self.errors, tab=2)}")
 
     def formatErrors(self, errors: api.RequestError | api.ObjectError | api.ArrayError | None, tab=0):
-        print(type(errors))
-        print(errors)
         tabulation = '  '*tab
         if errors is None:
             return f"{tabulation}No message"
@@ -81,7 +79,7 @@ class BuildURL:
     def __init__(self, baseUrl: str, aID: api.Snowflake) -> None:
         self.baseUrl = baseUrl
         self.id = aID
-    
+
     def commands(self, guildID: api.Snowflake | None, commandID: api.Snowflake | None):
         applications = f"/applications/{self.id}"
         guilds = f"/guilds/{guildID}" if guildID else ""
@@ -91,26 +89,26 @@ class BuildURL:
     def interactions(self, ixnID: api.Snowflake | None, ixnToken: str):
         interactions = f"/interactions/{ixnID}/{ixnToken}/callback"
         return self.baseUrl + interactions
-    
+
     def guilds(self, guildID: api.Snowflake | None):
         guilds = f"/guilds/{guildID}"
         return self.baseUrl + guilds
-    
+
     def channels(self, channelID: api.Snowflake | None):
         channels = f"/channels/{channelID}"
         return self.baseUrl + channels
-    
+
     def messages(self, channelID: api.Snowflake, messageID: api.Snowflake | None | Literal["bulk-delete"]):
         channels = f"/channels/{channelID}"
         messages = f"/messages/{messageID}" if messageID else f"/messages"
         return self.baseUrl + channels + messages
-    
+
     def webhooks(self, webhookID: api.Snowflake | None, webhookToken: str | None):
         webhooks = f"/webhooks/"
         wid = f"/{webhookID}" if webhookID else ""
         token = f"/{webhookToken}" if webhookID and webhookToken else ""
         return self.baseUrl + webhooks + wid + token
-    
+
     def webhookMessages(self, webhookID: api.Snowflake, webhookToken: str, messageID: api.Snowflake | None | Literal["@original"]):
         webhooks = f"/webhooks/{webhookID}/{webhookToken}"
         messages = f"/messages/{messageID}" if messageID else ""

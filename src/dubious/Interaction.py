@@ -17,6 +17,9 @@ class Ixn:
         self._ixn = ixn
         self._http = http
 
+        self.guildID = ixn.guild_id
+        self.channelID = ixn.channel_id
+
     @property
     async def guild(self):
         if self._ixn.guild_id and not hasattr(self, "_guild"):

@@ -1,6 +1,6 @@
 
 
-from typing import ClassVar, TypeVar
+from typing import Callable, ClassVar, TypeVar
 
 from typing_extensions import Self
 
@@ -23,6 +23,12 @@ class Pory2(Pory):
 
         For convenience, the `.TEST_IN` ClassVar will make all `Command`s in
         this Pory2 register in the guild with the specified ID. """
+
+    commands: dict[str, Callable]
+
+    def __init_subclass__(cls):
+        super().__init_subclass__()
+        cls.commands = Command.collectByReference(cls)
 
     TEST_IN: ClassVar[api.Snowflake | str | int | None] = None
 
@@ -55,7 +61,8 @@ class Pory2(Pory):
         for guildID in self.guildIDs:
             regdGuildly[guildID] = dictify(await self.http.getGuildCommands(guildID))
 
-        for pendingCommand in Command.get(self).values():
+        for bound in self.__class__.commands.values():
+            pendingCommand = Command.get(bound)
             if self.TEST_IN: pendingCommand.guildID = api.Snowflake(self.TEST_IN)
             await self._processPendingCommand(pendingCommand, regdGlobally, regdGuildly)
 
@@ -133,10 +140,11 @@ class Pory2(Pory):
 
     async def _chatInput(self, ixn: Ixn, data: api.InteractionData):
         if not data.name: raise AttributeError()
-        command = Command.get(self).get(data.name)
-        if not command: raise RuntimeError(f"Tried to run callback for command {data.name} but no callback existed.")
-        params = self._processOptions(command, data, data.resolved)
-        await command.call(self, ixn, **params)
+        bound = self.__class__.commands.get(data.name)
+        if not bound: raise RuntimeError(f"Tried to run callback for command {data.name} but no callback existed.")
+        info = Command.get(bound)
+        params = self._processOptions(info, data, data.resolved)
+        await bound(self, ixn, **params)
 
     def _getParamsForTR(self, command: Command, option: api.InteractionCommandDataOption, resolved: api.InteractionCommandDataResolved | None):
 

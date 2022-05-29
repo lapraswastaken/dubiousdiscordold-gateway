@@ -88,6 +88,11 @@ class Pory:
         payload. This method sets the `Pory`'s `user`, its `guildIDs`, and its
         `http` api connection. """
 
+    handles: dict[enums.codes, list[Callable]]
+
+    def __init_subclass__(cls):
+        cls.handles = Handle.collectByReference(cls)
+
     chip: Chip
     up: "Pory | None"
 
@@ -118,12 +123,12 @@ class Pory:
         return self
 
     async def _handle(self, code: enums.codes, payload: api.Payload):
-
-        handler = Handle.get(self).get(code)
-        if not handler: return
+        handlers = self.__class__.handles.get(code)
+        if not handlers: return
 
         d = api.castInner(payload)
-        await handler.call(self, d)
+        for handler in handlers:
+            await handler(self, d)
 
     @Handle(enums.tcode.Ready)
     async def ready(self, ready: api.Ready):

@@ -1,6 +1,7 @@
 
 import json
 from typing import ClassVar, Iterator, Literal, Mapping, overload
+from dubious.Machines import Command
 from dubious.discord import api
 
 

@@ -1,53 +1,47 @@
 
 import abc
 import inspect
-from typing import Any, Callable, Concatenate, Coroutine, TypeVar
+from typing import Any, Callable
+
 from typing_extensions import Self
 
-from pydantic import PrivateAttr
-from dubious.Interaction import Ixn
-
-from dubious.Register import OrderedRegister, Register, t_Params
 from dubious.discord import api, enums, make
+from dubious.Register import Register, t_Callable
 
-a_Data = api.Disc | bool | dict | None
-t_BoundData = TypeVar("t_BoundData", bound=a_Data)
-a_HandleCallback = Callable[[t_BoundData], Coroutine[Any, Any, None]]
-a_HandleReference = enums.opcode | enums.tcode
-
-class Handle(OrderedRegister[a_HandleReference]):
+class Handle(Register):
     """ Decorates functions meant to be called when Discord sends a dispatch
         payload (a payload with opcode 0 and an existent tcode). """
 
-    func: a_HandleCallback[a_Data]
     # The code that the handler will be attached to.
-    code: a_HandleReference
+    code: enums.codes
     # The lower the prio value, the sooner the handler is called.
+    order: int
     # This only applies to the ordering of handlers within one class - handlers of any superclass will always be called first.
 
-    def __init__(self, ident: a_HandleReference, order=0):
-        super().__init__(order)
+    def __init__(self, ident: enums.codes, order=0):
         self.code = ident
+        self.order = order
 
     def reference(self):
         return self.code
 
-a_RecordReference = str
+    @classmethod
+    def collectByReference(cls, of: type):
+        collection: dict[enums.codes, list[Callable]] = {}
+        for method, meta in Handle.collectMethodsOf(of).items():
+            collection[meta.code] = collection.get(meta.code, [])
+            collection[meta.code].append(method)
+            collection[meta.code].sort(key=lambda method: cls.get(method).order)
+        return collection
 
-t_TMCallback = Callable[
-    Concatenate[Any, Ixn, t_Params],
-        Coroutine[Any, Any, Any]
-]
-class Machine(Register[a_RecordReference], make.CommandPart, abc.ABC):
+class Machine(Register[str], make.CommandPart):
     """ An abstract class meant to decorate functions that will be called when
         Discord sends a dispatch payload with an Interaction object. """
 
-    _func: t_TMCallback = PrivateAttr()
-
-    def reference(self) -> a_RecordReference:
+    def reference(self):
         return self.name
 
-    def __call__(self, func: t_TMCallback[t_Params]) -> Self:
+    def __call__(self, func: t_Callable) -> t_Callable:
         # Perform a quick check to see if all extra parameters in the function
         #  signature exist in the options list.
         sig = inspect.signature(func)
@@ -56,23 +50,23 @@ class Machine(Register[a_RecordReference], make.CommandPart, abc.ABC):
                 raise AttributeError(f"Parameter `{option.name}` was found in this Command's Options list, but it wasn't found in this Command's function's signature.")
         return super().__call__(func)
 
-    async def call(self, owner: Any, ixn: Ixn, *args: Any, **kwargs: Any):
+    # async def call(self, owner: t_Owner, ixn: t_Ixn, *args: t_Params.args, **kwargs: t_Params.kwargs):
 
-        subcommand = None
-        subcommandKwargs = {}
-        for option in self.options:
-            if isinstance(option, Machine) and option.name in kwargs:
-                subcommand = option
-                subcommandKwargs = kwargs.pop(option.name)
-                break
+    #     subcommand = None
+    #     subcommandKwargs: dict[str, Machine[t_Owner, t_Ixn, t_Params, t_Ret]] = {}
+    #     for option in self.options:
+    #         if isinstance(option, Machine) and option.name in kwargs:
+    #             subcommand = option
+    #             subcommandKwargs[option.name] = kwargs.pop(option.name)
+    #             break
 
-        resultList = []
-        results = await super().call(owner, ixn, *args, **kwargs)
-        if isinstance(results, tuple): resultList += results
-        elif results: resultList.append(results)
+    #     resultList = []
+    #     results = await super().call(owner, ixn, *args, **kwargs)
+    #     if isinstance(results, tuple): resultList += results
+    #     elif results: resultList.append(results)
 
-        if subcommand:
-            return await subcommand.call(owner, ixn, *resultList, **subcommandKwargs)
+    #     if subcommand:
+    #         return await subcommand.call(owner, ixn, *resultList, **subcommandKwargs)
 
     @classmethod
     @abc.abstractmethod

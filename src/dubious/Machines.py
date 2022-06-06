@@ -43,7 +43,7 @@ class HasChecks(Meta):
     def __init__(self):
         self._andChecks = []
 
-    def andCheck(self, func: Callable[..., bool | str | make.RMessage | Coroutine[Any, Any, bool | str | make.RMessage]]) -> Self:
+    def after(self, func: Callable[..., bool | str | make.RMessage | Coroutine[Any, Any, bool | str | make.RMessage]]) -> Self:
         self._andChecks.append(Check.get(func))
         return self
 

@@ -1,9 +1,11 @@
 
 import abc
 import inspect
-from typing import Any, Callable
+from typing import Any, Callable, Coroutine
 
 from typing_extensions import Self
+
+from pydantic import Field, PrivateAttr
 from dubious.Interaction import Ixn
 
 from dubious.discord import api, enums, make
@@ -36,21 +38,28 @@ class Handle(Register):
         return collection
 
 class HasChecks(Meta):
-    checks: list["Check"]
+    _andChecks: list["Check"]
 
     def __init__(self):
-        self.checks = []
+        self._andChecks = []
 
-    def addCheck(self, func: Callable) -> Self:
-        self.checks.append(Check.get(func))
+    def andCheck(self, func: Callable[..., bool | str | make.RMessage | Coroutine[Any, Any, bool | str | make.RMessage]]) -> Self:
+        self._andChecks.append(Check.get(func))
         return self
 
     async def doChecks(self, ownerSelf: Any, ixn: Ixn):
 
-        for check in self.checks:
+        for check in self._andChecks:
             res = await check.do(ownerSelf, ixn)
             if not res: return res
         return True
+
+class FailedCheck(Exception):
+    """ An error class that denotes when a check's run failed. """
+
+    def __init__(self, message: str):
+        self.message = message
+        super().__init__(message)
 
 class Check(HasChecks):
     """ A class that wraps functions that serve to check whether or not a 
@@ -60,27 +69,29 @@ class Check(HasChecks):
         When this `Check` fails on `do`, it uses the passed `Ixn` to send the
         `.onFail` message. """
 
-    onFail: str | make.RMessage
-
-    def __init__(self, messageOnFail: str):
-        super().__init__()
-        self.onFail = messageOnFail
 
     async def do(self, ownerSelf: Any, ixn: Ixn):
         """ Performs this `Check`'s attached `Check`s, then performs itself. """
 
-        preres = self.doChecks(ownerSelf, ixn)
+        preres = await self.doChecks(ownerSelf, ixn)
         if not preres: return preres
 
         res = self.teg()(ownerSelf, ixn)
         if inspect.isawaitable(res): res = await res
 
-        if not res: await ixn.respond(self.onFail)
+        if isinstance(res, (str, make.RMessage)):
+            await ixn.respond(res, private=True)
+
         return res
 
 class Machine(Register[str], make.CommandPart, HasChecks):
     """ An abstract class meant to decorate functions that will be called when
         Discord sends a dispatch payload with an Interaction object. """
+
+    class Config:
+        arbitrary_types_allowed = True
+
+    _andChecks: list[Check] = PrivateAttr(default_factory=list)
 
     def reference(self):
         return self.name

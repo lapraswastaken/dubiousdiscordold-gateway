@@ -2,7 +2,6 @@
 import abc
 import json
 from typing import ClassVar, Iterator, Literal, Mapping, overload
-from dubious.Machines import Command
 from dubious.discord import api
 
 
@@ -61,10 +60,10 @@ class Structure(Mapping[api.Snowflake, dict[str, api.Snowflake | list[api.Snowfl
             return
 
         for guildID in self.d:
-            if not guildID in j: continue
+            if not str(guildID) in j: continue
             for name in self.d[guildID]:
-                if not name in j[guildID]: continue
-                self.d[guildID][name] = j[guildID][name]
+                if not name in j[str(guildID)]: continue
+                self.d[guildID][name] = j[str(guildID)][name]
 
     def write(self):
         with open(self.path, "w") as f:
@@ -82,6 +81,9 @@ class Structure(Mapping[api.Snowflake, dict[str, api.Snowflake | list[api.Snowfl
             ls = self.d[gid][item.name]
             if not isinstance(ls, list): raise ValueError("Tried to add a value to a non-Many item.")
             return ls
+
+    def getFromItem(self, gid: api.Snowflake, item: One | Many):
+        return self.get(gid, {}).get(item.name)
 
     def set(self, gid: api.Snowflake, item: One, value: api.Snowflake):
         self._check(gid, item)

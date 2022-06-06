@@ -6,9 +6,8 @@ from typing import ClassVar, TypeGuard
 from dubious.discord import api, enums
 from dubious.GuildStructure import Item, Many, ModStructure, One, Structure
 from dubious.Interaction import GuildIxn, Ixn
-from dubious.Machines import Check, Command, Handle, Option, Subcommand
+from dubious.Machines import Check, Command, FailedCheck, Handle, Option, Subcommand
 from dubious.Pory2 import Pory2
-from dubious.Register import Meta
 
 pat_ID = re.compile(r"<[#@&]+:?(\d{18})>")
 
@@ -63,23 +62,34 @@ class Pory_Z(Pory2, abc.ABC):
         else:
             return roles in member.roles
 
-    @Check(
-        "Can't use this command outside of a guild."
-    )
-    def checkIsInGuild(self, ixn: Ixn | GuildIxn) -> TypeGuard[GuildIxn]:
-        return isinstance(ixn, GuildIxn)
+    @Check()
+    def checkIsInGuild(self, ixn: Ixn | GuildIxn):
+        if not isinstance(ixn, GuildIxn):
+            return "You can't use this command outside of a guild."
+        return True
 
-    @Check(
-        "This command can only be used by a moderator."
-    ).addCheck(
-        checkIsInGuild
-    )
-    def checkIsMod(self, ixn: GuildIxn):
-        return self.getMemberHasRoles(ixn.guildID, self.Roles.getModRoleItem(), ixn.member)
+    @Check().andCheck(checkIsInGuild)
+    async def checkIsMemberGuildOwner(self, ixn: GuildIxn):
+        if not ixn.member.user:
+            return "This interaction object's member isn't tied to a user. How tf"
+        if not (await ixn.guild()).owner_id == ixn.member.user.id:
+            return "Only the guild owner can use this command."
+        return True
+
+    @Check().andCheck(checkIsInGuild)
+    async def checkIsMod(self, ixn: GuildIxn):
+        if await self.checkIsMemberGuildOwner(ixn):
+            return True
+
+        if not self.getRole(ixn.guildID, self.Roles.getModRoleItem()):
+            return "This guild has no moderator role set up yet. Ask the server owner to configure a role as the moderator role."
+        elif self.getMemberHasRoles(ixn.guildID, self.Roles.getModRoleItem(), ixn.member):
+            return True
+        return "Only members with the moderator role can use this command."
 
     @Command.new("config",
         "Configure the ID or IDs stored under a name for this guild."
-    ).addCheck(
+    ).andCheck(
         checkIsMod
     )
     async def config(self, ixn: Ixn):
@@ -96,11 +106,14 @@ class Pory_Z(Pory2, abc.ABC):
         @Subcommand.new(item.name,
             f"Alters the {'ID' if isinstance(item, One) else 'IDs'} stored in {item.name}."
         )
-        async def _alter(_, ixn: GuildIxn):
-            return ixn, item, structure
+        async def _alter(_, __: GuildIxn):
+            return item, structure
         alter = Subcommand.get(_alter)
+        if isinstance(structure, ModStructure) and structure.getModRoleItem() == item:
+            alter.andCheck(self.checkIsMemberGuildOwner)
 
         Command.get(self.config).subcommand(alter)
+        alter.subcommand(Subcommand.get(self._get))
 
         if isinstance(item, One):
             alter.subcommand(Subcommand.get(self._set))
@@ -163,3 +176,10 @@ class Pory_Z(Pory2, abc.ABC):
     async def _clear(self, ixn: GuildIxn, item: Many, structure: Structure):
         structure.clear(ixn.guildID, item)
         await ixn.respond(f"Removed all IDs from `{item.name}`.")
+
+    @Subcommand.new("get",
+        f"Gets the ID or IDs set for this item."
+    )
+    async def _get(self, ixn: GuildIxn, item: One | Many, structure: Structure):
+        gotten = structure.getFromItem(ixn.guildID, item)
+        await ixn.respond(f"`{item.name}`: `{gotten}`")

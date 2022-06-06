@@ -126,9 +126,7 @@ class Pory2(Pory):
         command = self.__class__.commands.get(data.name)
         if not command: raise RuntimeError(f"Tried to run callback for command {data.name} but no callback existed.")
         params = self._processOptions(command, data, data.resolved)
-        res = await command.call(self, ixn, **params)
-        if isinstance(res, Check):
-            await ixn.respond(res.onFail, private=True)
+        await command.call(self, ixn, **params)
 
     def _processOptions(self,
         command: Command,

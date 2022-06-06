@@ -1,7 +1,7 @@
 
 import abc
 import re
-from typing import ClassVar, TypeGuard
+from typing import ClassVar, TypeGuard, overload
 
 from dubious.discord import api, enums
 from dubious.GuildStructure import Item, Many, ModStructure, One, Structure
@@ -40,13 +40,27 @@ class Pory_Z(Pory2, abc.ABC):
             await ixn.respond(f"Couldn't find any IDs in \"{value}\".")
         return matches
 
-    def getChannel(self, gid: api.Snowflake, which: Item):
+    @overload
+    def getChannel(self, gid: api.Snowflake, which: One) -> api.Snowflake | None: ...
+    @overload
+    def getChannel(self, gid: api.Snowflake, which: Many) -> list[api.Snowflake] | None: ...
+    @overload
+    def getChannel(self, gid: api.Snowflake, which: Item) -> api.Snowflake | list[api.Snowflake] | None: ...
+
+    def getChannel(self, gid: api.Snowflake, which: Item) -> api.Snowflake | list[api.Snowflake] | None:
         """ Gets a channel ID / channel IDs from an item in the `self.Channels`
             structure assigned to a specific guild. """
 
         return self._channels.get(gid, {}).get(which.name)
 
-    def getRole(self, gid: api.Snowflake, which: Item):
+    @overload
+    def getRole(self, gid: api.Snowflake, which: One) -> api.Snowflake | None: ...
+    @overload
+    def getRole(self, gid: api.Snowflake, which: Many) -> list[api.Snowflake] | None: ...
+    @overload
+    def getRole(self, gid: api.Snowflake, which: Item) -> api.Snowflake | list[api.Snowflake] | None: ...
+
+    def getRole(self, gid: api.Snowflake, which: Item) -> api.Snowflake | list[api.Snowflake] | None:
         """ Gets a role ID / role IDs from an item in the `self.Roles` structure
             assigned to a specific guild. """
 
@@ -68,7 +82,7 @@ class Pory_Z(Pory2, abc.ABC):
             return "You can't use this command outside of a guild."
         return True
 
-    @Check().andCheck(checkIsInGuild)
+    @Check().after(checkIsInGuild)
     async def checkIsMemberGuildOwner(self, ixn: GuildIxn):
         if not ixn.member.user:
             return "This interaction object's member isn't tied to a user. How tf"
@@ -76,7 +90,7 @@ class Pory_Z(Pory2, abc.ABC):
             return "Only the guild owner can use this command."
         return True
 
-    @Check().andCheck(checkIsInGuild)
+    @Check().after(checkIsInGuild)
     async def checkIsMod(self, ixn: GuildIxn):
         if await self.checkIsMemberGuildOwner(ixn) is True:
             return True
@@ -89,7 +103,7 @@ class Pory_Z(Pory2, abc.ABC):
 
     @Command.new("config",
         "Configure the ID or IDs stored under a name for this guild."
-    ).andCheck(
+    ).after(
         checkIsMod
     )
     async def config(self, ixn: Ixn):
@@ -110,7 +124,7 @@ class Pory_Z(Pory2, abc.ABC):
             return item, structure
         alter = Subcommand.get(_alter)
         if isinstance(structure, ModStructure) and structure.getModRoleItem() == item:
-            alter.andCheck(self.checkIsMemberGuildOwner)
+            alter.after(self.checkIsMemberGuildOwner)
 
         Command.get(self.config).subcommand(alter)
         alter.subcommand(Subcommand.get(self._get))

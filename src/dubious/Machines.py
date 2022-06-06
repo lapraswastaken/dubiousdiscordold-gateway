@@ -81,6 +81,7 @@ class Check(HasChecks):
 
         if isinstance(res, (str, make.RMessage)):
             await ixn.respond(res, private=True)
+            return False
 
         return res
 

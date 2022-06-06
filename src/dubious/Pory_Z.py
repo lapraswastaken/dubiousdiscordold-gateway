@@ -78,7 +78,7 @@ class Pory_Z(Pory2, abc.ABC):
 
     @Check().andCheck(checkIsInGuild)
     async def checkIsMod(self, ixn: GuildIxn):
-        if await self.checkIsMemberGuildOwner(ixn):
+        if await self.checkIsMemberGuildOwner(ixn) is True:
             return True
 
         if not self.getRole(ixn.guildID, self.Roles.getModRoleItem()):
@@ -126,6 +126,13 @@ class Pory_Z(Pory2, abc.ABC):
     #####
     # ID Manipulation Subcommand defs
     #####
+
+    @Subcommand.new("get",
+        f"Gets the ID or IDs set for this item."
+    )
+    async def _get(self, ixn: GuildIxn, item: One | Many, structure: Structure):
+        gotten = structure.getFromItem(ixn.guildID, item)
+        await ixn.respond(f"`{item.name}`: `{gotten}`")
 
     @Subcommand.new("set",
         f"Sets the ID of an item.",
@@ -176,10 +183,3 @@ class Pory_Z(Pory2, abc.ABC):
     async def _clear(self, ixn: GuildIxn, item: Many, structure: Structure):
         structure.clear(ixn.guildID, item)
         await ixn.respond(f"Removed all IDs from `{item.name}`.")
-
-    @Subcommand.new("get",
-        f"Gets the ID or IDs set for this item."
-    )
-    async def _get(self, ixn: GuildIxn, item: One | Many, structure: Structure):
-        gotten = structure.getFromItem(ixn.guildID, item)
-        await ixn.respond(f"`{item.name}`: `{gotten}`")

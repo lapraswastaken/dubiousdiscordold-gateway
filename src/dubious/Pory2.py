@@ -1,12 +1,12 @@
 
 
-from typing import Callable, ClassVar, TypeVar
+from typing import ClassVar, TypeVar
 
 from typing_extensions import Self
 
 from dubious.discord import api, enums, make
-from dubious.Interaction import Ixn
-from dubious.Machines import Command, Handle, Machine
+from dubious.Interaction import Ixn, makeIxn
+from dubious.Machines import Check, Command, Handle
 from dubious.Pory import Chip, Pory
 
 
@@ -24,7 +24,7 @@ class Pory2(Pory):
         For convenience, the `.TEST_IN` ClassVar will make all `Command`s in
         this Pory2 register in the guild with the specified ID. """
 
-    commands: dict[str, Callable]
+    commands: dict[str, Command]
 
     def __init_subclass__(cls):
         super().__init_subclass__()
@@ -61,8 +61,7 @@ class Pory2(Pory):
         for guildID in self.guildIDs:
             regdGuildly[guildID] = dictify(await self.http.getGuildCommands(guildID))
 
-        for bound in self.__class__.commands.values():
-            pendingCommand = Command.get(bound)
+        for pendingCommand in self.__class__.commands.values():
             if self.TEST_IN: pendingCommand.guildID = api.Snowflake(self.TEST_IN)
             await self._processPendingCommand(pendingCommand, regdGlobally, regdGuildly)
 
@@ -116,11 +115,20 @@ class Pory2(Pory):
     @Handle(api.tcode.InteractionCreate)
     async def _interaction(self, interaction: api.Interaction):
         if interaction.data:
-            ixn = Ixn(interaction, self.http)
+            ixn = makeIxn(interaction, self.http)
             if interaction.type == enums.InteractionEventTypes.ApplicationCommand:
                 match interaction.data.type:
                     case enums.ApplicationCommandTypes.ChatInput:
                         await self._chatInput(ixn, interaction.data)
+
+    async def _chatInput(self, ixn: Ixn, data: api.InteractionData):
+        if not data.name: raise AttributeError()
+        command = self.__class__.commands.get(data.name)
+        if not command: raise RuntimeError(f"Tried to run callback for command {data.name} but no callback existed.")
+        params = self._processOptions(command, data, data.resolved)
+        res = await command.call(self, ixn, **params)
+        if isinstance(res, Check):
+            await ixn.respond(res.onFail, private=True)
 
     def _processOptions(self,
         command: Command,
@@ -128,25 +136,25 @@ class Pory2(Pory):
         resolved: api.InteractionCommandDataResolved | None,
         params: dict | None = None
     ):
+
         if not params: params = {}
         if not data.options: return params
         for option in data.options:
-            if option.type in [enums.CommandOptionTypes.SubCommand, enums.CommandOptionTypes.SubCommandGroup]:
+            if option.type in [
+                enums.CommandOptionTypes.SubCommand,
+                enums.CommandOptionTypes.SubCommandGroup
+            ]:
                 param = self._processOptions(command, option, resolved, params)
             else:
-                param = self._getParamsForTR(command, option, resolved)
+                param = self._getParamsForCommand(command, option, resolved)
             params[option.name] = param
         return params
 
-    async def _chatInput(self, ixn: Ixn, data: api.InteractionData):
-        if not data.name: raise AttributeError()
-        bound = self.__class__.commands.get(data.name)
-        if not bound: raise RuntimeError(f"Tried to run callback for command {data.name} but no callback existed.")
-        info = Command.get(bound)
-        params = self._processOptions(info, data, data.resolved)
-        await bound(self, ixn, **params)
-
-    def _getParamsForTR(self, command: Command, option: api.InteractionCommandDataOption, resolved: api.InteractionCommandDataResolved | None):
+    def _getParamsForCommand(self,
+        command: Command,
+        option: api.InteractionCommandDataOption,
+        resolved: api.InteractionCommandDataResolved | None
+    ):
 
         hint = command.getOption(option.name)
         if not hint: raise ValueError(f"Function for Command `{command.reference()}` got unexpected option `{option.name}`")
@@ -161,11 +169,13 @@ class Pory2(Pory):
         t_Resolved = TypeVar("t_Resolved", bound=api.Disc)
         def _cast(resolvedObjects: dict[api.Snowflake, t_Resolved] | None):
             if resolvedObjects is None: raise AttributeError()
+            if not isinstance(option.value, (int, str)):
+                raise ValueError(f"Function for command `{command.reference()}` got an unknown option value (`{option.value}`) for option `{option.name}`")
             id_ = api.Snowflake(option.value)
             if id_ in resolvedObjects:
                 return resolvedObjects[id_]
             else:
-                raise ValueError(f"Function for Learn `{command.reference()}` couldn't find a resolved object for option {option.name}")
+                raise ValueError(f"Function for command `{command.reference()}` couldn't find a resolved object for option `{option.name}`")
 
         match hint.type:
             case enums.CommandOptionTypes.User:
@@ -177,6 +187,7 @@ class Pory2(Pory):
             case enums.CommandOptionTypes.Channel:
                 param = _cast(resolved.channels if resolved else None)
             case enums.CommandOptionTypes.Mentionable:
+                if not isinstance(param, (int, str)): raise ValueError()
                 param = api.Snowflake(param)
             case enums.CommandOptionTypes.SubCommand | enums.CommandOptionTypes.SubCommandGroup:
                 param = option

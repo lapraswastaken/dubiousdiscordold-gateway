@@ -1,7 +1,6 @@
 
 import abc
-from copy import deepcopy
-from typing import (Any, Callable, Concatenate, Coroutine, Generic, Hashable, TypeVar)
+from typing import Any, Callable, Generic, Hashable, TypeVar
 
 from typing_extensions import Self
 
@@ -19,7 +18,14 @@ class Meta:
 
     @classmethod
     def get(cls, fn: Callable[..., Any]) -> Self:
+        if not fn in cls.__meta__:
+            return cls.__meta__[fn.__func__]
         return cls.__meta__[fn]
+
+    def teg(self):
+        # Command(name='config', description='Configure the ID or IDs stored under a name for this guild.', type=<ApplicationCommandTypes.ChatInput: 1>, options=[], guildID=None)
+        # Command(name='config', description='Configure the ID or IDs stored under a name for this guild.', type=<ApplicationCommandTypes.ChatInput: 1>, options=[], guildID=None)
+        return {v: k for k, v in self.__class__.__meta__.items()}[self]
 
     @classmethod
     def collectMethodsOf(cls, of: type):
@@ -50,7 +56,7 @@ class Register(Generic[t_Reference], Meta):
 
     @classmethod
     def collectByReference(cls, of: type):
-        collection: dict[t_Reference, Callable] = {}
-        for method, meta in cls.collectMethodsOf(of).items():
-            collection[meta.reference()] = method
+        collection: dict[t_Reference, Self] = {}
+        for meta in cls.collectMethodsOf(of).values():
+            collection[meta.reference()] = meta
         return collection

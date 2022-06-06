@@ -2,6 +2,10 @@
 from typing import Any, Callable, Coroutine
 from dubious.discord import api, enums, make, rest
 
+def makeIxn(ixn: api.Interaction, http: rest.Http):
+    if ixn.guild_id: return GuildIxn(ixn, http)
+    return Ixn(ixn, http)
+
 class Ixn:
     """ Holds methods and relevant information about an `api.Interaction` object
         recieved from Discord. """

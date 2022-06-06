@@ -1,4 +1,5 @@
 
+import abc
 import json
 from typing import ClassVar, Iterator, Literal, Mapping, overload
 from dubious.Machines import Command
@@ -110,3 +111,18 @@ class Structure(Mapping[api.Snowflake, dict[str, api.Snowflake | list[api.Snowfl
         self._check(gid, item, True)
         self.d[gid][item.name] = []
         self.write()
+
+class ModStructure(Structure, abc.ABC):
+    @classmethod
+    @abc.abstractmethod
+    def getModRoleItem(cls) -> One:
+        pass
+
+    def getModRole(self, gid: api.Snowflake | None) -> api.Snowflake | None:
+        if not gid: return None
+        guildStructure = self.get(gid)
+        if not guildStructure: raise
+
+        ret = guildStructure.get(self.getModRoleItem().name)
+        if isinstance(ret, list): raise ValueError()
+        return ret

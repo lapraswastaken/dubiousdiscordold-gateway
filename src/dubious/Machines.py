@@ -4,9 +4,10 @@ import inspect
 from typing import Any, Callable
 
 from typing_extensions import Self
+from dubious.Interaction import Ixn
 
 from dubious.discord import api, enums, make
-from dubious.Register import Register, t_Callable
+from dubious.Register import Meta, Register, t_Callable
 
 class Handle(Register):
     """ Decorates functions meant to be called when Discord sends a dispatch
@@ -27,14 +28,57 @@ class Handle(Register):
 
     @classmethod
     def collectByReference(cls, of: type):
-        collection: dict[enums.codes, list[Callable]] = {}
-        for method, meta in Handle.collectMethodsOf(of).items():
+        collection: dict[enums.codes, list[Self]] = {}
+        for meta in Handle.collectMethodsOf(of).values():
             collection[meta.code] = collection.get(meta.code, [])
-            collection[meta.code].append(method)
-            collection[meta.code].sort(key=lambda method: cls.get(method).order)
+            collection[meta.code].append(meta)
+            collection[meta.code].sort(key=lambda m: m.order)
         return collection
 
-class Machine(Register[str], make.CommandPart):
+class HasChecks(Meta):
+    checks: list["Check"]
+
+    def __init__(self):
+        self.checks = []
+
+    def addCheck(self, func: Callable) -> Self:
+        self.checks.append(Check.get(func))
+        return self
+
+    async def doChecks(self, ownerSelf: Any, ixn: Ixn):
+
+        for check in self.checks:
+            res = await check.do(ownerSelf, ixn)
+            if not res: return res
+        return True
+
+class Check(HasChecks):
+    """ A class that wraps functions that serve to check whether or not a 
+        Command can be executed. Can be attached to `Command`s or other `Check`s
+        via their respective `addCheck` methods.
+
+        When this `Check` fails on `do`, it uses the passed `Ixn` to send the
+        `.onFail` message. """
+
+    onFail: str | make.RMessage
+
+    def __init__(self, messageOnFail: str):
+        super().__init__()
+        self.onFail = messageOnFail
+
+    async def do(self, ownerSelf: Any, ixn: Ixn):
+        """ Performs this `Check`'s attached `Check`s, then performs itself. """
+
+        preres = self.doChecks(ownerSelf, ixn)
+        if not preres: return preres
+
+        res = self.teg()(ownerSelf, ixn)
+        if inspect.isawaitable(res): res = await res
+
+        if not res: await ixn.respond(self.onFail)
+        return res
+
+class Machine(Register[str], make.CommandPart, HasChecks):
     """ An abstract class meant to decorate functions that will be called when
         Discord sends a dispatch payload with an Interaction object. """
 
@@ -46,27 +90,32 @@ class Machine(Register[str], make.CommandPart):
         #  signature exist in the options list.
         sig = inspect.signature(func)
         for option in self.options:
+            if isinstance(option, Machine): continue
             if not option.name in sig.parameters:
                 raise AttributeError(f"Parameter `{option.name}` was found in this Command's Options list, but it wasn't found in this Command's function's signature.")
         return super().__call__(func)
 
-    # async def call(self, owner: t_Owner, ixn: t_Ixn, *args: t_Params.args, **kwargs: t_Params.kwargs):
+    async def call(self, ownerSelf: Any, ixn: Ixn, *args, **kwargs):
 
-    #     subcommand = None
-    #     subcommandKwargs: dict[str, Machine[t_Owner, t_Ixn, t_Params, t_Ret]] = {}
-    #     for option in self.options:
-    #         if isinstance(option, Machine) and option.name in kwargs:
-    #             subcommand = option
-    #             subcommandKwargs[option.name] = kwargs.pop(option.name)
-    #             break
+        res = await self.doChecks(ownerSelf, ixn)
+        if not res: return
 
-    #     resultList = []
-    #     results = await super().call(owner, ixn, *args, **kwargs)
-    #     if isinstance(results, tuple): resultList += results
-    #     elif results: resultList.append(results)
+        subcommand = None
+        subcommandKwargs: dict[str, Machine] = {}
+        for option in self.options:
+            if isinstance(option, Machine) and option.name in kwargs:
+                subcommand = option
+                subcommandKwargs = kwargs.pop(option.name)
+                break
 
-    #     if subcommand:
-    #         return await subcommand.call(owner, ixn, *resultList, **subcommandKwargs)
+        results = await self.teg()(ownerSelf, ixn, *args, **kwargs)
+        if not isinstance(results, tuple):
+            results = (results,) if results is not None else tuple()
+
+        if subcommand:
+            return await subcommand.call(ownerSelf, ixn, *results, **subcommandKwargs)
+        else:
+            return results
 
     @classmethod
     @abc.abstractmethod
@@ -98,16 +147,14 @@ class Machine(Register[str], make.CommandPart):
         for option in self.options:
             if isinstance(option, Machine):
                 ret = option.getOption(name)
-                if ret:
-                    return ret
+                if ret: return ret
         return self.getOptionsByName().get(name)
 
     def subcommand(self, command: "Subcommand"):
-        """ Returns an Option Machine to wrap a subsequent Command.
-            That Command will be called after this one when its subcommand
-            option is selected. """
-
+        fn = self.teg()
+        self.__class__.__meta__.pop(fn)
         self.options.append(command)
+        self.__call__(fn)
         return command
 
 class Command(Machine, make.Command):

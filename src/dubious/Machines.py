@@ -1,83 +1,137 @@
 
 import abc
 import inspect
-from typing import Any, Callable, Concatenate, Coroutine, TypeVar
+from typing import Any, Callable, Coroutine
+
 from typing_extensions import Self
 
-from pydantic import PrivateAttr
+from pydantic import Field, PrivateAttr
 from dubious.Interaction import Ixn
 
-from dubious.Register import OrderedRegister, Register, t_Params
 from dubious.discord import api, enums, make
+from dubious.Register import Meta, Register, t_Callable
 
-a_Data = api.Disc | bool | dict | None
-t_BoundData = TypeVar("t_BoundData", bound=a_Data)
-a_HandleCallback = Callable[[t_BoundData], Coroutine[Any, Any, None]]
-a_HandleReference = enums.opcode | enums.tcode
-
-class Handle(OrderedRegister[a_HandleReference]):
+class Handle(Register):
     """ Decorates functions meant to be called when Discord sends a dispatch
         payload (a payload with opcode 0 and an existent tcode). """
 
-    func: a_HandleCallback[a_Data]
     # The code that the handler will be attached to.
-    code: a_HandleReference
+    code: enums.codes
     # The lower the prio value, the sooner the handler is called.
+    order: int
     # This only applies to the ordering of handlers within one class - handlers of any superclass will always be called first.
 
-    def __init__(self, ident: a_HandleReference, order=0):
-        super().__init__(order)
+    def __init__(self, ident: enums.codes, order=0):
         self.code = ident
+        self.order = order
 
     def reference(self):
         return self.code
 
-a_RecordReference = str
+    @classmethod
+    def collectByReference(cls, of: type):
+        collection: dict[enums.codes, list[Self]] = {}
+        for meta in Handle.collectMethodsOf(of).values():
+            collection[meta.code] = collection.get(meta.code, [])
+            collection[meta.code].append(meta)
+            collection[meta.code].sort(key=lambda m: m.order)
+        return collection
 
-t_TMCallback = Callable[
-    Concatenate[Any, Ixn, t_Params],
-        Coroutine[Any, Any, Any]
-]
-class Machine(Register[a_RecordReference], make.CommandPart, abc.ABC):
+class HasChecks(Meta):
+    _andChecks: list["Check"]
+
+    def __init__(self):
+        self._andChecks = []
+
+    def andCheck(self, func: Callable[..., bool | str | make.RMessage | Coroutine[Any, Any, bool | str | make.RMessage]]) -> Self:
+        self._andChecks.append(Check.get(func))
+        return self
+
+    async def doChecks(self, ownerSelf: Any, ixn: Ixn):
+
+        for check in self._andChecks:
+            res = await check.do(ownerSelf, ixn)
+            if not res: return res
+        return True
+
+class FailedCheck(Exception):
+    """ An error class that denotes when a check's run failed. """
+
+    def __init__(self, message: str):
+        self.message = message
+        super().__init__(message)
+
+class Check(HasChecks):
+    """ A class that wraps functions that serve to check whether or not a 
+        Command can be executed. Can be attached to `Command`s or other `Check`s
+        via their respective `addCheck` methods.
+
+        When this `Check` fails on `do`, it uses the passed `Ixn` to send the
+        `.onFail` message. """
+
+
+    async def do(self, ownerSelf: Any, ixn: Ixn):
+        """ Performs this `Check`'s attached `Check`s, then performs itself. """
+
+        preres = await self.doChecks(ownerSelf, ixn)
+        if not preres: return preres
+
+        res = self.teg()(ownerSelf, ixn)
+        if inspect.isawaitable(res): res = await res
+
+        if isinstance(res, (str, make.RMessage)):
+            await ixn.respond(res, private=True)
+            return False
+
+        return res
+
+class Machine(Register[str], make.CommandPart, HasChecks):
     """ An abstract class meant to decorate functions that will be called when
         Discord sends a dispatch payload with an Interaction object. """
 
-    _func: t_TMCallback = PrivateAttr()
+    class Config:
+        arbitrary_types_allowed = True
 
-    def reference(self) -> a_RecordReference:
+    _andChecks: list[Check] = PrivateAttr(default_factory=list)
+
+    def reference(self):
         return self.name
 
-    def __call__(self, func: t_TMCallback[t_Params]) -> Self:
+    def __call__(self, func: t_Callable) -> t_Callable:
         # Perform a quick check to see if all extra parameters in the function
         #  signature exist in the options list.
         sig = inspect.signature(func)
-        for paramName in sig.parameters:
-            param = sig.parameters[paramName]
-            if (
-                paramName == "self" or
-                issubclass(param.annotation, Ixn) or
-                param.annotation == inspect.Parameter.empty
-            ): continue
-            if not paramName in [option.name for option in self.options]:
-                raise AttributeError(f"Parameter {paramName} was found in this command's function's signature, but it wasn't found in this command's options.")
+        for option in self.options:
+            if isinstance(option, Machine): continue
+            if not option.name in sig.parameters:
+                raise AttributeError(f"Parameter `{option.name}` was found in this Command's Options list, but it wasn't found in this Command's function's signature.")
         return super().__call__(func)
 
-    async def call(self, owner: Any, ixn: Ixn, **kwargs: Any):
-        subcommands: list[Machine] = []
-        toRemove: list[str] = []
-        for kwargname, kwarg in kwargs.items():
-            if isinstance(kwarg, Machine):
-                subcommands.append(kwarg)
-                toRemove.append(kwargname)
-        for remove in toRemove:
-            kwargs.pop(remove)
-        await super().call(owner, ixn, **kwargs)
-        for subcommand in subcommands:
-            await subcommand.call(owner, ixn, **kwargs)
+    async def call(self, ownerSelf: Any, ixn: Ixn, *args, **kwargs):
+
+        res = await self.doChecks(ownerSelf, ixn)
+        if not res: return
+
+        subcommand = None
+        subcommandKwargs: dict[str, Machine] = {}
+        for option in self.options:
+            if isinstance(option, Machine) and option.name in kwargs:
+                subcommand = option
+                subcommandKwargs = kwargs.pop(option.name)
+                break
+
+        results = await self.teg()(ownerSelf, ixn, *args, **kwargs)
+        if not isinstance(results, tuple):
+            results = (results,) if results is not None else tuple()
+
+        if subcommand:
+            return await subcommand.call(ownerSelf, ixn, *results, **subcommandKwargs)
+        else:
+            return results
 
     @classmethod
     @abc.abstractmethod
-    def make(cls,
+    def new(cls,
         name: str,
         description: str,
         type: enums.ApplicationCommandTypes | enums.CommandOptionTypes,
@@ -102,20 +156,31 @@ class Machine(Register[a_RecordReference], make.CommandPart, abc.ABC):
     def getOption(self, name: str):
         """ Returns the option in this Machine with the specified name. """
 
+        for option in self.options:
+            if isinstance(option, Machine):
+                ret = option.getOption(name)
+                if ret: return ret
         return self.getOptionsByName().get(name)
+
+    def subcommand(self, command: "Subcommand"):
+        fn = self.teg()
+        self.__class__.__meta__.pop(fn)
+        self.options.append(command)
+        self.__call__(fn)
+        return command
 
 class Command(Machine, make.Command):
     """ Decorates functions meant to be called when Discord sends a payload
         describing a ChatInput Interaction. """
 
     @classmethod
-    def make(cls,
+    def new(cls,
         name: str,
         description: str,
         options: list[make.CommandPart] | None=None,
         guildID: api.Snowflake | int | str | None=None
     ):
-        return super().make(
+        return super().new(
             name=name,
             description=description,
             type=enums.ApplicationCommandTypes.ChatInput,
@@ -123,40 +188,44 @@ class Command(Machine, make.Command):
             guildID=api.Snowflake(guildID) if guildID else None,
         )
 
-    def subcommand(self, command: "Command"):
-        """ Returns an Option Machine to wrap a subsequent Command.
-            That Command will be called after this one when its subcommand
-            option is selected. """
-
-        option = Option.make(
-            command.name,
-            command.description,
-            enums.CommandOptionTypes.SubCommand,
-            None
-        )
-        option.__call__(command._func)
-        self.options.append(option)
-        return option
-
-class Option(Machine, make.CommandOption):
-    """ A class that holds information about a Command's arguments. """
+class Subcommand(Machine, make.CommandOption):
 
     @classmethod
-    def make(cls,
+    def new(cls,
         name: str,
         description: str,
-        type: enums.CommandOptionTypes,
-        required: bool | None=True,
-        choices: list[make.CommandOptionChoice] | None=None
+        options: list[make.CommandPart] | None=None,
     ):
-        return super().make(
+        return super().new(
             name=name,
             description=description,
-            type=type,
-            required=required,
-            choices=choices if choices else [],
-            options=[]
+            type=enums.CommandOptionTypes.SubCommand,
+            required=None,
+            options=options if options else [],
+            choices=[]
         )
+
+    def subcommand(self, command: "Subcommand"):
+        self.type = enums.CommandOptionTypes.SubCommandGroup
+        return super().subcommand(command)
+
+def Option(
+    name: str,
+    description: str,
+    type: enums.CommandOptionTypes,
+    required: bool | None=True,
+    choices: list[make.CommandOptionChoice] | None=None,
+    options: list[make.CommandPart] | None=None
+):
+    """ Constructs a CommandOption without the need for kwargs. """
+    return make.CommandOption(
+        name=name,
+        description=description,
+        type=type,
+        required=required,
+        choices=choices if choices else [],
+        options=options if options else [],
+    )
 
 def Choice(name: str, value: Any):
     """ Constructs a CommandOptionChoice without the need for kwargs. """

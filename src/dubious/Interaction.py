@@ -2,6 +2,9 @@
 from typing import Any, Callable, Coroutine
 from dubious.discord import api, enums, make, rest
 
+def makeIxn(ixn: api.Interaction, http: rest.Http):
+    if ixn.guild_id: return GuildIxn(ixn, http)
+    return Ixn(ixn, http)
 
 class Ixn:
     """ Holds methods and relevant information about an `api.Interaction` object
@@ -11,17 +14,13 @@ class Ixn:
     _ixn: api.Interaction
     _http: rest.Http
 
-    _guild: api.Guild
+    user: api.User
 
     def __init__(self, ixn: api.Interaction, http: rest.Http):
         self._ixn = ixn
         self._http = http
 
-    @property
-    async def guild(self):
-        if self._ixn.guild_id and not hasattr(self, "_guild"):
-            self._guild = await self._http.getGuild(self._ixn.guild_id)
-        return self._guild
+        self.user = ixn.member.user if ixn.member else ixn.user # type: ignore
 
     t_Response = make.Response | make.CallbackData | str
 
@@ -85,3 +84,35 @@ class Ixn:
             lambda res: self._http.postInteractionFollowup(self._ixn.token, res.data),
             silent, private
         )
+
+class GuildIxn(Ixn):
+    _guild: api.Guild | None = None
+    _channel: api.Channel | None = None
+
+    guildID: api.Snowflake
+    channelID: api.Snowflake
+    member: api.Member
+
+    async def guild(self):
+        if not self._ixn.guild_id: raise AttributeError()
+        if not self._guild:
+            self._guild = await self._http.getGuild(self._ixn.guild_id)
+        return self._guild
+
+    async def channel(self):
+        if not self._ixn.channel_id: raise AttributeError()
+        if not self._channel:
+            self._channel = await self._http.getChannel(self._ixn.channel_id)
+        return self._channel
+
+    def __init__(self, ixn: api.Interaction, http: rest.Http):
+        super().__init__(ixn, http)
+        if not (
+            ixn.guild_id and
+            ixn.channel_id and
+            ixn.member
+        ): raise ValueError("Tried to make GuildIxn out of an api.Interaction object that did not originate from a guild.")
+
+        self.guildID = ixn.guild_id
+        self.channelID = ixn.channel_id
+        self.member = ixn.member

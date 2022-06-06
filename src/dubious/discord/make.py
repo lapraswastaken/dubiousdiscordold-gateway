@@ -42,6 +42,9 @@ class CommandPart(Make):
     type: enums.ApplicationCommandTypes | enums.CommandOptionTypes
     options: list[CommandPart]
 
+    def __hash__(self):
+        return hash((self.name, self.description, self.type, (hash(option) for option in self.options)))
+
     def eq(self, o: api.ApplicationCommand | api.ApplicationCommandOption) -> bool:
         return (
             self.name == o.name and

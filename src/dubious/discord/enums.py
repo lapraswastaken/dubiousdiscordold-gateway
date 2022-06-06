@@ -81,16 +81,30 @@ codes = opcode | tcode
 
 
 class ApplicationCommandTypes(int, Enum):
-    ChatInput = 1
-    PerUser = 2
+    ChatInput  = 1
+    PerUser    = 2
     PerMessage = 3
 
 class ButtonStyles(int, Enum):
-    Primary = 1
+    Primary   = 1
     Secondary = 2
-    Success = 3
-    Danger = 4
-    Link = 5
+    Success   = 3
+    Danger    = 4
+    Link      = 5
+
+class ChannelTypes(int, Enum):
+    GuildText          = 0
+    DM                 = 1
+    GuildVoice         = 2
+    GroupDM            = 3
+    GuildCategory      = 4
+    GuildNews          = 5
+    GuildNewsThread    = 10
+    GuildPublicThread  = 11
+    GuildPrivateThread = 12
+    GuildStageVoice    = 13
+    GuildDirectory     = 14
+    GuildForum         = 15
 
 class HTTPResponseCode(int, Enum):
     """ https://discord.com/developers/docs/topics/opcodes-and-status-codes#http """
@@ -120,21 +134,21 @@ class CommandOptionTypes(int, Enum):
     Number          = 10
 
 class Intents(int, Enum):
-    Guilds = 1 << 0
-    GuildMembers = 1 << 1
-    GuildBans = 1 << 2
+    Guilds                 = 1 << 0
+    GuildMembers           = 1 << 1
+    GuildBans              = 1 << 2
     GuildEmojisAndStickers = 1 << 3
-    GuildIntegrations = 1 << 4
-    GuildWebhooks = 1 << 5
-    GuildInvites = 1 << 6
-    GuildVoiceStates = 1 << 7
-    GuildPresences = 1 << 8
-    GuildMessages = 1 << 9
-    GuildMessageReactions = 1 << 10
-    GuildMessageTyping = 1 << 11
-    DirectMessages = 1 << 12
+    GuildIntegrations      = 1 << 4
+    GuildWebhooks          = 1 << 5
+    GuildInvites           = 1 << 6
+    GuildVoiceStates       = 1 << 7
+    GuildPresences         = 1 << 8
+    GuildMessages          = 1 << 9
+    GuildMessageReactions  = 1 << 10
+    GuildMessageTyping     = 1 << 11
+    DirectMessages         = 1 << 12
     DirectMessageReactions = 1 << 13
-    DirectMessageTyping = 1 << 14
+    DirectMessageTyping    = 1 << 14
 
 class InteractionEventTypes(int, Enum):
     Ping               = 1
